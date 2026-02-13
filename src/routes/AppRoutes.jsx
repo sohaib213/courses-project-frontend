@@ -18,8 +18,8 @@ const AppRoutes = () => {
       <Route path="/" element={<Home />} />
       <Route path="/courses" element={<Courses />} />
       <Route path="/courses/:id" element={<CourseDetail />} />
-      {/* <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} /> */}
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
 
       {/* Protected Routes */}
       <Route

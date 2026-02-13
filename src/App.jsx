@@ -5,6 +5,7 @@ import AppRoutes from "./routes/AppRoutes";
 import Navbar from "./components/layout/Navbar";
 import { useAppDispatch } from "./redux/hooks";
 import { checkAuth } from "./redux/slices/authSlice";
+import { initializeDarkMode } from "./redux/slices/uiSlice";
 
 function App() {
   const dispatch = useAppDispatch();
@@ -12,21 +13,24 @@ function App() {
   useEffect(() => {
     // Check if user is already logged in on app load
     dispatch(checkAuth());
+    // Initialize dark mode from localStorage/system preference
+    dispatch(initializeDarkMode());
   }, [dispatch]);
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen flex flex-col bg-gray-50">
+      <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-dark-950 transition-colors duration-200">
         <Navbar />
         <main className="flex-grow">
           <AppRoutes />
         </main>
 
-        {/* Toast notifications */}
+        {/* Toast notifications with dark mode support */}
         <Toaster
           position="top-right"
           toastOptions={{
             duration: 3000,
+            className: "dark:bg-dark-800 dark:text-white",
             style: {
               background: "#363636",
               color: "#fff",
