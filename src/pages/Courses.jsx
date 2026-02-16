@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../redux/hooks";
 import {
   fetchCourses,
@@ -25,6 +26,8 @@ import { Range } from "react-range";
 
 const Courses = () => {
   const dispatch = useAppDispatch();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const categoryIdFromQuery = searchParams.get("category_id");
 
   // Course state
   const { courses, isLoading, filters, pagination } = useAppSelector(
@@ -44,13 +47,14 @@ const Courses = () => {
   const MAX = 1000;
 
   const [values, setValues] = useState([0, 1000]);
+  const isPriceFilterActive = values[0] !== MIN || values[1] !== MAX;
 
   useEffect(() => {
     const handler = setTimeout(() => {
       dispatch(
         setFilters({
-          min_price: values[0],
-          max_price: values[1],
+          min_price: values[0] === MIN ? undefined : values[0],
+          max_price: values[1] === MAX ? undefined : values[1],
         }),
       );
       dispatch(setPage(1));
@@ -75,6 +79,13 @@ const Courses = () => {
     };
   }, [localSearch, dispatch]);
 
+  useEffect(() => {
+    if (!categoryIdFromQuery) return;
+
+    dispatch(setFilters({ category_id: categoryIdFromQuery }));
+    dispatch(setPage(1));
+  }, [dispatch, categoryIdFromQuery]);
+
   // Fetch courses when filters/pagination change
   useEffect(() => {
     const params = {
@@ -92,12 +103,27 @@ const Courses = () => {
 
   const handleResetFilters = () => {
     setLocalSearch("");
+    setValues([MIN, MAX]);
     dispatch(resetFilters());
+    const params = new URLSearchParams(searchParams);
+    params.delete("category_id");
+    setSearchParams(params, { replace: true });
   };
 
   const handleCategoryFilter = (categoryId) => {
     dispatch(setFilters({ category_id: categoryId }));
     dispatch(setPage(1));
+    const params = new URLSearchParams(searchParams);
+    params.set("category_id", categoryId);
+    setSearchParams(params, { replace: true });
+  };
+
+  const handleClearCategoryFilter = () => {
+    dispatch(setFilters({ category_id: "" }));
+    dispatch(setPage(1));
+    const params = new URLSearchParams(searchParams);
+    params.delete("category_id");
+    setSearchParams(params, { replace: true });
   };
 
   const handlePageChange = (newPage) => {
@@ -171,7 +197,7 @@ const Courses = () => {
                   Filters
                 </button>
 
-                {(filters.search || filters.category_id) && (
+                {(filters.search || filters.category_id || isPriceFilterActive) && (
                   <button
                     type="button"
                     onClick={handleResetFilters}
@@ -201,10 +227,12 @@ const Courses = () => {
                 {filters.category_id && (
                   <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                     <Filter className="h-3 w-3 mr-1.5" />
-                    {categories.find((c) => c.id === filters.category_id)
-                      ?.name || "Category"}
+                    {categories.find(
+                      (c) =>
+                        String(c.id || c._id) === String(filters.category_id),
+                    )?.name || "Category"}
                     <button
-                      onClick={() => dispatch(setFilters({ category_id: "" }))}
+                      onClick={handleClearCategoryFilter}
                       className="ml-2 hover:text-purple-900 dark:hover:text-purple-100"
                     >
                       <X className="h-3 w-3" />
@@ -238,10 +266,13 @@ const Courses = () => {
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                       {categories.map((category) => (
                         <button
-                          key={category.id}
-                          onClick={() => handleCategoryFilter(category.id)}
+                          key={category.id || category._id}
+                          onClick={() =>
+                            handleCategoryFilter(category.id || category._id)
+                          }
                           className={`group relative overflow-hidden px-4 py-3 rounded-xl border-2 transition-all ${
-                            filters.category_id === category.id
+                            String(filters.category_id) ===
+                            String(category.id || category._id)
                               ? "border-primary-500 bg-gradient-to-br " +
                                 category.color +
                                 " text-white shadow-lg scale-105"

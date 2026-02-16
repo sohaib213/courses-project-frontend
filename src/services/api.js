@@ -26,9 +26,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
+      // Token expired or invalid. Do not hard-reload the app here.
+      // Components/routes should handle unauthenticated state.
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      localStorage.removeItem('auth_user');
     }
     return Promise.reject(error);
   }

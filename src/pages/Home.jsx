@@ -5,19 +5,47 @@ import {
   Award,
   TrendingUp,
   ArrowRight,
-  Star,
+  ChevronLeft,
+  ChevronRight,
   Zap,
   Target,
-  Globe,
-  Clock,
   CheckCircle2,
   Play,
   Sparkles,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAppDispatch, useAppSelector } from "../redux/hooks";
+import {
+  fetchCategories,
+  selectAllCategories,
+  selectCategoriesError,
+  selectCategoriesLoading,
+  selectShouldRefetchCategories,
+} from "../redux/slices/categorySlice";
+import { fetchCourses } from "../redux/slices/courseSlice";
 
 const Home = () => {
+  const dispatch = useAppDispatch();
+  const categories = useAppSelector(selectAllCategories);
+  const categoriesLoading = useAppSelector(selectCategoriesLoading);
+  const categoriesError = useAppSelector(selectCategoriesError);
+  const shouldRefetchCategories = useAppSelector(selectShouldRefetchCategories);
+  const { courses, isLoading: coursesLoading, error: coursesError } =
+    useAppSelector((state) => state.courses);
   const [hoveredFeature, setHoveredFeature] = useState(null);
+  const coursesSliderRef = useRef(null);
+
+  useEffect(() => {
+    if (shouldRefetchCategories) {
+      dispatch(fetchCategories());
+    }
+  }, [dispatch, shouldRefetchCategories]);
+
+  useEffect(() => {
+    if (courses.length === 0) {
+      dispatch(fetchCourses({ page: 1, limit: 12 }));
+    }
+  }, [dispatch, courses.length]);
 
   const features = [
     {
@@ -72,43 +100,20 @@ const Home = () => {
     },
   ];
 
-  const categories = [
-    { name: "Web Development", courses: 120, icon: "💻", color: "bg-blue-500" },
-    { name: "Data Science", courses: 85, icon: "📊", color: "bg-purple-500" },
-    { name: "Mobile Apps", courses: 65, icon: "📱", color: "bg-green-500" },
-    { name: "UI/UX Design", courses: 90, icon: "🎨", color: "bg-pink-500" },
-    {
-      name: "Digital Marketing",
-      courses: 75,
-      icon: "📈",
-      color: "bg-orange-500",
-    },
-    { name: "Cloud Computing", courses: 55, icon: "☁️", color: "bg-cyan-500" },
-  ];
+  const featuredCourses = courses.slice(0, 10);
 
-  const testimonials = [
-    {
-      name: "Sarah Johnson",
-      role: "Software Developer",
-      image: "https://i.pravatar.cc/150?img=1",
-      text: "This platform transformed my career. The courses are top-notch and the instructors are incredibly knowledgeable.",
-      rating: 5,
-    },
-    {
-      name: "Michael Chen",
-      role: "Data Analyst",
-      image: "https://i.pravatar.cc/150?img=2",
-      text: "Best investment in my education. I went from beginner to landing my dream job in just 6 months!",
-      rating: 5,
-    },
-    {
-      name: "Emily Rodriguez",
-      role: "UX Designer",
-      image: "https://i.pravatar.cc/150?img=3",
-      text: "The project-based approach helped me build a portfolio that impressed employers. Highly recommended!",
-      rating: 5,
-    },
-  ];
+  const scrollCourses = (direction) => {
+    if (!coursesSliderRef.current) return;
+    coursesSliderRef.current.scrollBy({
+      left: direction * 360,
+      behavior: "smooth",
+    });
+  };
+
+  const formatPrice = (price) => {
+    if (!price || price === "0" || price === 0) return "Free";
+    return `$${price}`;
+  };
 
   return (
     <div className="min-h-screen">
@@ -214,6 +219,115 @@ const Home = () => {
         </div>
       </section>
 
+      {/* Featured Courses Slider */}
+      <section className="section bg-gray-50 dark:bg-dark-900">
+        <div className="container-custom">
+          <div className="flex items-center justify-between gap-4 mb-8">
+            <div>
+              <h2 className="text-4xl md:text-5xl font-bold mb-2 text-gray-900 dark:text-white">
+                Featured <span className="gradient-text">Courses</span>
+              </h2>
+              <p className="text-lg text-gray-600 dark:text-gray-400">
+                Explore popular courses selected for you
+              </p>
+            </div>
+
+            <div className="hidden md:flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => scrollCourses(-1)}
+                className="p-2 rounded-full border border-gray-200 dark:border-dark-700 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-dark-800 transition-colors"
+                aria-label="Scroll left"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollCourses(1)}
+                className="p-2 rounded-full border border-gray-200 dark:border-dark-700 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-dark-800 transition-colors"
+                aria-label="Scroll right"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          {coursesLoading && featuredCourses.length === 0 && (
+            <div className="text-center text-gray-600 dark:text-gray-400">
+              Loading courses...
+            </div>
+          )}
+
+          {!coursesLoading && coursesError && featuredCourses.length === 0 && (
+            <div className="text-center text-red-600 dark:text-red-400">
+              {coursesError}
+            </div>
+          )}
+
+          {!coursesLoading && !coursesError && featuredCourses.length === 0 && (
+            <div className="text-center text-gray-600 dark:text-gray-400">
+              No courses available yet.
+            </div>
+          )}
+
+          {featuredCourses.length > 0 && (
+            <div
+              ref={coursesSliderRef}
+              className="flex gap-6 overflow-x-auto pb-2 snap-x snap-mandatory"
+            >
+              {featuredCourses.map((course) => {
+                const courseId = course.id || course._id;
+
+                return (
+                  <Link
+                    key={courseId}
+                    to={`/courses/${courseId}`}
+                    className="min-w-[280px] md:min-w-[320px] max-w-[320px] card-hover snap-start group"
+                  >
+                    <div className="relative overflow-hidden rounded-xl mb-4 aspect-video">
+                      <img
+                        src={
+                          course.thumbnail_url ||
+                          "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course"
+                        }
+                        alt={course.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        onError={(e) => {
+                          e.target.src =
+                            "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course";
+                        }}
+                      />
+                      <span className="absolute top-3 right-3 text-xs px-3 py-1.5 rounded-full font-semibold bg-white/95 dark:bg-dark-900/95 text-gray-900 dark:text-white">
+                        {formatPrice(course.price)}
+                      </span>
+                    </div>
+
+                    <h3 className="text-lg font-bold mb-2 line-clamp-2 text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                      {course.title}
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-4">
+                      {course.description || "No description available."}
+                    </p>
+
+                    <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-500">
+                      <span>{course.category?.name || "General"}</span>
+                      <span>{course.teacher?.username || "Instructor"}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="text-center mt-10">
+            <Link to="/courses" className="btn-outline">
+              Browse All Courses
+              <ArrowRight className="inline-block ml-2 h-5 w-5" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Features Section */}
       <section className="section bg-gray-50 dark:bg-dark-900">
         <div className="container-custom">
@@ -265,25 +379,48 @@ const Home = () => {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-            {categories.map((category, index) => (
-              <Link
-                key={index}
-                to={`/courses?category=${category.name}`}
-                className="card-hover text-center p-6 group"
-              >
-                <div
-                  className={`w-16 h-16 ${category.color} rounded-2xl flex items-center justify-center text-4xl mx-auto mb-4 group-hover:scale-110 transition-transform duration-300`}
+            {categoriesLoading && categories.length === 0 && (
+              <div className="col-span-full text-center text-gray-600 dark:text-gray-400">
+                Loading categories...
+              </div>
+            )}
+
+            {!categoriesLoading && categoriesError && (
+              <div className="col-span-full text-center text-red-600 dark:text-red-400">
+                {categoriesError}
+              </div>
+            )}
+
+            {!categoriesLoading && !categoriesError && categories.length === 0 && (
+              <div className="col-span-full text-center text-gray-600 dark:text-gray-400">
+                No categories available yet.
+              </div>
+            )}
+
+            {categories.slice(0, 6).map((category, index) => {
+              const categoryId = category.id || category._id;
+
+              return (
+                <Link
+                  key={category.id || category._id || `${category.name}-${index}`}
+                  to={
+                    categoryId
+                      ? `/courses?category_id=${encodeURIComponent(categoryId)}`
+                      : "/courses"
+                  }
+                  className="card-hover text-center p-6 group"
                 >
-                  {category.icon}
-                </div>
-                <h3 className="font-bold text-gray-900 dark:text-white mb-1">
-                  {category.name}
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {category.courses} courses
-                </p>
-              </Link>
-            ))}
+                  <div
+                    className={`w-16 h-16 bg-gradient-to-br ${category.color || "from-blue-500 to-cyan-500"} rounded-2xl flex items-center justify-center text-4xl mx-auto mb-4 group-hover:scale-110 transition-transform duration-300`}
+                  >
+                    {category.icon || "📚"}
+                  </div>
+                  <h3 className="font-bold text-gray-900 dark:text-white mb-1">
+                    {category.name}
+                  </h3>
+                </Link>
+              );
+            })}
           </div>
 
           <div className="text-center mt-12">
@@ -313,53 +450,6 @@ const Home = () => {
                 </div>
                 <div className="text-lg text-white/90 dark:text-white/80">
                   {stat.label}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials Section */}
-      <section className="section bg-gray-50 dark:bg-dark-900">
-        <div className="container-custom">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-white">
-              Student <span className="gradient-text">Success Stories</span>
-            </h2>
-            <p className="text-xl text-gray-600 dark:text-gray-400">
-              See what our students are saying
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, index) => (
-              <div key={index} className="card-hover">
-                <div className="flex items-center mb-4">
-                  {[...Array(testimonial.rating)].map((_, i) => (
-                    <Star
-                      key={i}
-                      className="h-5 w-5 text-yellow-400 fill-yellow-400"
-                    />
-                  ))}
-                </div>
-                <p className="text-gray-700 dark:text-gray-300 mb-6 italic">
-                  "{testimonial.text}"
-                </p>
-                <div className="flex items-center gap-4">
-                  <img
-                    src={testimonial.image}
-                    alt={testimonial.name}
-                    className="w-12 h-12 rounded-full"
-                  />
-                  <div>
-                    <div className="font-bold text-gray-900 dark:text-white">
-                      {testimonial.name}
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                      {testimonial.role}
-                    </div>
-                  </div>
                 </div>
               </div>
             ))}

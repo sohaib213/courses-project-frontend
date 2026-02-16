@@ -1,66 +1,60 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { authService } from '../../services/authService';
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { authService } from "../../services/authService";
 
 // Async Thunks
 export const login = createAsyncThunk(
-  'auth/login',
+  "auth/login",
   async (credentials, { rejectWithValue }) => {
     try {
-      const data = await authService.login(credentials);
-      const user = await authService.getCurrentUser();
-      return { ...data, user };
+      const response = await authService.login(credentials);
+
+      return response;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || 'Login failed'
+        error.response?.data?.message || "Invalid email or password",
       );
     }
-  }
+  },
 );
 
 export const register = createAsyncThunk(
-  'auth/register',
+  "auth/register",
   async (userData, { rejectWithValue }) => {
     try {
       const data = await authService.register(userData);
       return data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || 'Registration failed'
+        error.response?.data?.message || "Registration failed",
       );
     }
-  }
+  },
 );
 
 export const checkAuth = createAsyncThunk(
-  'auth/checkAuth',
+  "auth/checkAuth",
   async (_, { rejectWithValue }) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      return rejectWithValue('No token found');
-    }
-
     try {
-      const user = await authService.getCurrentUser();
+      const user = await authService.restoreSession();
       return user;
-    } catch (error) {
-      localStorage.removeItem('token');
-      return rejectWithValue('Invalid token');
+    } catch {
+      return rejectWithValue("Not authenticated");
     }
-  }
+  },
 );
 
 export const updateProfile = createAsyncThunk(
-  'auth/updateProfile',
+  "auth/updateProfile",
   async (userData, { rejectWithValue }) => {
     try {
       const data = await authService.updateProfile(userData);
       return data;
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || 'Update failed'
+        error.response?.data?.message || "Failed to update profile",
       );
     }
-  }
+  },
 );
 
 // Initial State
@@ -73,14 +67,13 @@ const initialState = {
 
 // Slice
 const authSlice = createSlice({
-  name: 'auth',
+  name: "auth",
   initialState,
   reducers: {
     logout: (state) => {
       authService.logout();
       state.user = null;
       state.isAuthenticated = false;
-      state.error = null;
     },
     clearError: (state) => {
       state.error = null;
@@ -96,8 +89,7 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isAuthenticated = true;
-        state.user = action.payload.user;
-        state.error = null;
+        state.user = action.payload.user || action.payload;
       })
       .addCase(login.rejected, (state, action) => {
         state.isLoading = false;
@@ -112,7 +104,7 @@ const authSlice = createSlice({
       })
       .addCase(register.fulfilled, (state) => {
         state.isLoading = false;
-        state.error = null;
+        // Don't auto-login after register, they need to verify email
       })
       .addCase(register.rejected, (state, action) => {
         state.isLoading = false;
@@ -144,7 +136,6 @@ const authSlice = createSlice({
       .addCase(updateProfile.fulfilled, (state, action) => {
         state.isLoading = false;
         state.user = action.payload;
-        state.error = null;
       })
       .addCase(updateProfile.rejected, (state, action) => {
         state.isLoading = false;

@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAppSelector } from '../redux/hooks';
 
-const ProtectedRoute = ({ children, requiredRole }) => {
+const ProtectedRoute = ({ children, requiredRole, requiredUserType }) => {
   const { isAuthenticated, user, isLoading } = useAppSelector((state) => state.auth);
 
   // Show loading state while checking authentication
@@ -20,6 +20,11 @@ const ProtectedRoute = ({ children, requiredRole }) => {
 
   // Check for required role if specified
   if (requiredRole && user?.role !== requiredRole) {
+    return <Navigate to="/" replace />;
+  }
+
+  // Check for required user type if specified (e.g. Teacher/Student)
+  if (requiredUserType && user?.type !== requiredUserType) {
     return <Navigate to="/" replace />;
   }
 

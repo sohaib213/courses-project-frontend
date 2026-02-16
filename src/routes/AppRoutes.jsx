@@ -8,8 +8,12 @@ import CourseDetail from "../pages/CourseDetail";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
 import Dashboard from "../pages/Dashboard";
-import Profile from "../pages/Profile";
 import NotFound from "../pages/NotFound";
+import InstructorProfile from "../pages/InstructorProfile";
+import VerifyEmail from "../pages/VerifyEmail";
+import CompleteProfile from "../pages/CompleteProfile";
+import GoogleCallback from "../pages/GoogleCallback";
+import UserProfile from "../pages/UserProfile";
 
 const AppRoutes = () => {
   return (
@@ -18,14 +22,18 @@ const AppRoutes = () => {
       <Route path="/" element={<Home />} />
       <Route path="/courses" element={<Courses />} />
       <Route path="/courses/:id" element={<CourseDetail />} />
-      <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/instructor/:id" element={<InstructorProfile />} />
+      <Route path="/complete-profile" element={<CompleteProfile />} />
+      <Route path="/auth/google/callback" element={<GoogleCallback />} />
 
       {/* Protected Routes */}
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requiredUserType="Teacher">
             <Dashboard />
           </ProtectedRoute>
         }
@@ -34,7 +42,7 @@ const AppRoutes = () => {
         path="/profile"
         element={
           <ProtectedRoute>
-            <Profile />
+            <UserProfile />
           </ProtectedRoute>
         }
       />
