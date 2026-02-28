@@ -14,6 +14,10 @@ import VerifyEmail from "../pages/VerifyEmail";
 import CompleteProfile from "../pages/CompleteProfile";
 import GoogleCallback from "../pages/GoogleCallback";
 import UserProfile from "../pages/UserProfile";
+import MyCourses from "../pages/MyCourses";
+import CourseLearning from "../pages/CourseLearning";
+import Cart from "../pages/Cart";
+import Payment from "../pages/Payment";
 
 const AppRoutes = () => {
   return (
@@ -28,7 +32,24 @@ const AppRoutes = () => {
       <Route path="/instructor/:id" element={<InstructorProfile />} />
       <Route path="/complete-profile" element={<CompleteProfile />} />
       <Route path="/auth/google/callback" element={<GoogleCallback />} />
-
+      <Route path="/my-courses" element={<MyCourses />} />
+      <Route path="/courses/:courseId/learn" element={<CourseLearning />} />
+      <Route
+        path="/cart"
+        element={
+          <ProtectedRoute>
+            <Cart />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/payment"
+        element={
+          <ProtectedRoute>
+            <Payment />
+          </ProtectedRoute>
+        }
+      />
       {/* Protected Routes */}
       <Route
         path="/dashboard"

@@ -43,25 +43,8 @@ export const courseService = {
 
   getMyCourses: async () => {
     const enrollmentsResponse = await api.get("/enrollments");
-    const enrollments = Array.isArray(enrollmentsResponse.data?.data)
-      ? enrollmentsResponse.data.data
-      : [];
 
-    const courses = await Promise.all(
-      enrollments
-        .filter((enrollment) => enrollment?.course_id)
-        .map(async (enrollment) => {
-          const courseResponse = await api.get(`/courses/${enrollment.course_id}`);
-          const course = courseResponse.data?.data;
-
-          return {
-            ...course,
-            enrollment,
-          };
-        }),
-    );
-
-    return courses.filter((course) => course?.id);
+    return enrollmentsResponse.data.data;
   },
 
   // Additional helper methods for specific queries

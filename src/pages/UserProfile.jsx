@@ -355,124 +355,126 @@ const UserProfile = () => {
 
         {/* Activity Sections */}
         <div className="grid lg:grid-cols-3 gap-6">
-              {/* Recent Courses */}
-              <div className="lg:col-span-2 card">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-                  <BookOpen className="h-6 w-6 text-primary-600 dark:text-primary-400" />
-                  Recent Courses
-                </h2>
-                {isCoursesLoading ? (
-                  <div className="py-10 text-center text-gray-600 dark:text-gray-400">
-                    Loading enrolled courses...
-                  </div>
-                ) : recentCourses.length === 0 ? (
-                  <div className="py-10 text-center text-gray-600 dark:text-gray-400">
-                    You are not enrolled in any courses yet.
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {recentCourses.map((course) => {
-                      const progress = getCourseProgress(course);
-
-                      return (
-                        <Link
-                          key={course.id}
-                          to={`/courses/${course.id}`}
-                          className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-dark-800 rounded-xl hover:bg-gray-100 dark:hover:bg-dark-700 transition-colors"
-                        >
-                          {course.thumbnail_url ? (
-                            <img
-                              src={course.thumbnail_url}
-                              alt={course.title || "Course thumbnail"}
-                              className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="w-16 h-16 bg-gradient-to-br from-primary-600 to-purple-600 rounded-xl flex-shrink-0"></div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-gray-900 dark:text-white truncate">
-                              {course.title || "Untitled Course"}
-                            </h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              {progress !== null
-                                ? `Progress: ${progress}%`
-                                : "Progress data unavailable"}
-                            </p>
-                          </div>
-                          <div className="w-16 h-16">
-                            <svg
-                              className="transform -rotate-90"
-                              viewBox="0 0 36 36"
-                            >
-                              <path
-                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                                className="text-gray-200 dark:text-dark-700"
-                              />
-                              <path
-                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                                strokeDasharray={`${progress || 0}, 100`}
-                                className="text-primary-600 dark:text-primary-400"
-                              />
-                            </svg>
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
+          {/* Recent Courses */}
+          <div className="lg:col-span-2 card">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+              <BookOpen className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+              Recent Courses
+            </h2>
+            {isCoursesLoading ? (
+              <div className="py-10 text-center text-gray-600 dark:text-gray-400">
+                Loading enrolled courses...
               </div>
+            ) : recentCourses.length === 0 ? (
+              <div className="py-10 text-center text-gray-600 dark:text-gray-400">
+                You are not enrolled in any courses yet.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {recentCourses.map((course) => {
+                  const progress = getCourseProgress(course);
 
-              {/* Achievements */}
-              <div className="lg:col-span-1 card">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-                  <Award className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-                  Achievements
-                </h2>
-                <div className="space-y-4">
-                  {[
-                    {
-                      title: "First Course",
-                      icon: "🎯",
-                      color: "from-blue-500 to-cyan-500",
-                    },
-                    {
-                      title: "Week Streak",
-                      icon: "🔥",
-                      color: "from-orange-500 to-red-500",
-                    },
-                    {
-                      title: "Top Performer",
-                      icon: "⭐",
-                      color: "from-yellow-500 to-orange-500",
-                    },
-                  ].map((achievement, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-dark-800 rounded-xl"
+                  return (
+                    <Link
+                      key={course.id}
+                      to={`/courses/${course.id}`}
+                      className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-dark-800 rounded-xl hover:bg-gray-100 dark:hover:bg-dark-700 transition-colors"
                     >
-                      <div
-                        className={`w-12 h-12 bg-gradient-to-br ${achievement.color} rounded-xl flex items-center justify-center text-2xl`}
-                      >
-                        {achievement.icon}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900 dark:text-white">
-                          {achievement.title}
+                      {course.thumbnail_url ? (
+                        <img
+                          src={course.thumbnail_url}
+                          alt={course.title || "Course thumbnail"}
+                          className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 bg-gradient-to-br from-primary-600 to-purple-600 rounded-xl flex-shrink-0"></div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                          {course.title || "Untitled Course"}
                         </h3>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                          Earned recently
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {progress !== null
+                            ? `Progress: ${progress}%`
+                            : "Progress data unavailable"}
                         </p>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                      <div className="w-16 h-16">
+                        <svg
+                          className="transform -rotate-90"
+                          viewBox="0 0 36 36"
+                        >
+                          <path
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            className="text-gray-200 dark:text-dark-700"
+                          />
+                          <path
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            strokeDasharray={`${progress || 0}, 100`}
+                            className="text-primary-600 dark:text-primary-400"
+                          />
+                        </svg>
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
+            )}
+          </div>
+          <Link to="/my-courses" className="text-primary-600 hover:underline">
+            View All Courses →
+          </Link>
+          {/* Achievements */}
+          <div className="lg:col-span-1 card">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+              <Award className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+              Achievements
+            </h2>
+            <div className="space-y-4">
+              {[
+                {
+                  title: "First Course",
+                  icon: "🎯",
+                  color: "from-blue-500 to-cyan-500",
+                },
+                {
+                  title: "Week Streak",
+                  icon: "🔥",
+                  color: "from-orange-500 to-red-500",
+                },
+                {
+                  title: "Top Performer",
+                  icon: "⭐",
+                  color: "from-yellow-500 to-orange-500",
+                },
+              ].map((achievement, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-dark-800 rounded-xl"
+                >
+                  <div
+                    className={`w-12 h-12 bg-gradient-to-br ${achievement.color} rounded-xl flex items-center justify-center text-2xl`}
+                  >
+                    {achievement.icon}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">
+                      {achievement.title}
+                    </h3>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Earned recently
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

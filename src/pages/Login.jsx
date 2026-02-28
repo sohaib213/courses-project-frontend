@@ -76,6 +76,7 @@ const Login = () => {
 
     try {
       setIsResetLoading(true);
+      console.log("email: ", emailToUse);
       await authService.resetPasswordRequest(emailToUse);
       toast.success("Reset code sent. Please check your email.");
       setForgotPasswordEmail(emailToUse);

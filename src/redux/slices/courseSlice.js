@@ -149,6 +149,7 @@ export const fetchMyCourses = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const data = await courseService.getMyCourses();
+      console.log(data);
       return data;
     } catch (error) {
       return rejectWithValue(
@@ -348,7 +349,7 @@ const courseSlice = createSlice({
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(enrollInCourse.fulfilled, (state, action) => {
+      .addCase(enrollInCourse.fulfilled, (state) => {
         state.isLoading = false;
         if (state.currentCourse) {
           state.currentCourse.isEnrolled = true;

@@ -12,6 +12,7 @@ import {
   Sun,
   Bell,
   Settings,
+  ShoppingCart,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -75,6 +76,20 @@ const Navbar = () => {
                     Dashboard
                   </Link>
                 )}
+
+                <Link
+                  to="/my-courses"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium rounded-lg hover:bg-gray-100 dark:hover:bg-dark-800 transition-all"
+                >
+                  My Courses
+                </Link>
+                <Link
+                  to="/cart"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium rounded-lg hover:bg-gray-100 dark:hover:bg-dark-800 transition-all inline-flex items-center gap-2"
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  Cart
+                </Link>
 
                 {/* Notifications */}
                 <button className="p-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg relative">
@@ -158,7 +173,6 @@ const Navbar = () => {
                 </Link>
               </>
             )}
-
             {/* Dark Mode Toggle */}
             <button
               onClick={handleToggleDarkMode}
@@ -230,6 +244,21 @@ const Navbar = () => {
                   >
                     <User className="h-4 w-4" />
                     <span>{user?.username || user?.email}</span>
+                  </Link>
+                  <Link
+                    to="/my-courses"
+                    className="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg font-medium transition-all"
+                    onClick={closeMobileMenu}
+                  >
+                    My Courses
+                  </Link>
+                  <Link
+                    to="/cart"
+                    className="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg font-medium transition-all flex items-center gap-2"
+                    onClick={closeMobileMenu}
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    <span>Cart</span>
                   </Link>
                   <button
                     onClick={handleLogout}

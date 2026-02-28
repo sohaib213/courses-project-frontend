@@ -21,8 +21,10 @@ import {
   BarChart3,
   Sparkles,
   ArrowRight,
+  ShoppingCart,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { cartService } from "../services/cartService";
 
 const CourseDetail = () => {
   const { id } = useParams();
@@ -33,6 +35,7 @@ const CourseDetail = () => {
   );
   const { isAuthenticated } = useAppSelector((state) => state.auth);
   const [enrolling, setEnrolling] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -101,6 +104,26 @@ const CourseDetail = () => {
       toast.error(error || "Failed to enroll in course");
     } finally {
       setEnrolling(false);
+    }
+  };
+
+  const handleAddToCart = async () => {
+    if (!isAuthenticated) {
+      toast.error("Please login to add courses to cart");
+      navigate("/login");
+      return;
+    }
+
+    try {
+      setAddingToCart(true);
+      await cartService.addItem(id);
+      toast.success("Course added to cart");
+    } catch (error) {
+      const message =
+        error?.response?.data?.message || "Failed to add course to cart";
+      toast.error(Array.isArray(message) ? message[0] : message);
+    } finally {
+      setAddingToCart(false);
     }
   };
 
@@ -287,7 +310,7 @@ const CourseDetail = () => {
                     <CheckCircle2 className="h-5 w-5 mr-2" />
                     Already Enrolled
                   </button>
-                ) : (
+                ) : isFree ? (
                   <button
                     onClick={handleEnroll}
                     disabled={enrolling}
@@ -305,6 +328,32 @@ const CourseDetail = () => {
                       </>
                     )}
                   </button>
+                ) : (
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleAddToCart}
+                      disabled={addingToCart}
+                      className="btn-primary w-full disabled:opacity-50"
+                    >
+                      {addingToCart ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="h-5 w-5 mr-2" />
+                          Add to Cart
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => navigate("/cart")}
+                      className="btn-secondary w-full"
+                    >
+                      Go to Cart
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
