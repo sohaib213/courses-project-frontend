@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import { Clock, Users, Star, BookOpen, TrendingUp, Award } from "lucide-react";
+import defaultCoursePhoto from "../../../src/assets/default_course_photo.jpg";
+import defaultUserPhoto from "../../../src/assets/default_user_photo.jpg";
 
 const CourseCard = ({ course, viewMode = "grid" }) => {
   // Format difficulty level with colors
@@ -50,15 +52,11 @@ const CourseCard = ({ course, viewMode = "grid" }) => {
         {/* Course Thumbnail */}
         <div className="relative overflow-hidden rounded-xl mb-4 aspect-video">
           <img
-            src={
-              course.thumbnail_url ||
-              "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course"
-            }
-            alt={course.title}
+            src={course.thumbnail_url || defaultCoursePhoto}
+            alt={defaultCoursePhoto}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
             onError={(e) => {
-              e.target.src =
-                "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course";
+              e.target.src = defaultCoursePhoto;
             }}
           />
 
@@ -138,8 +136,11 @@ const CourseCard = ({ course, viewMode = "grid" }) => {
                 {course.teacher.image ? (
                   <img
                     src={course.teacher.image}
-                    alt={course.teacher.username}
+                    alt={defaultUserPhoto}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.src = defaultUserPhoto;
+                    }}
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-primary-600 to-purple-600 flex items-center justify-center">
@@ -170,15 +171,11 @@ const CourseCard = ({ course, viewMode = "grid" }) => {
       {/* Thumbnail - Smaller in list view */}
       <div className="relative w-full md:w-64 h-48 md:h-auto flex-shrink-0 overflow-hidden rounded-xl">
         <img
-          src={
-            course.thumbnail_url ||
-            "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course"
-          }
-          alt={course.title}
+          src={course.thumbnail_url || defaultCoursePhoto}
+          alt={defaultCoursePhoto}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
           onError={(e) => {
-            e.target.src =
-              "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course";
+            e.target.src = defaultCoursePhoto;
           }}
         />
 
@@ -260,8 +257,11 @@ const CourseCard = ({ course, viewMode = "grid" }) => {
                 {course.teacher.image ? (
                   <img
                     src={course.teacher.image}
-                    alt={course.teacher.username || "Teacher"}
+                    alt={defaultUserPhoto}
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.src = defaultUserPhoto;
+                    }}
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-primary-600 to-purple-600 flex items-center justify-center">

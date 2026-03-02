@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { cartService } from "../services/cartService";
+import defaultCoursePhoto from "../../src/assets/default_course_photo.jpg";
 
 const Cart = () => {
   const navigate = useNavigate();
@@ -199,15 +200,11 @@ const Cart = () => {
                       className="relative overflow-hidden rounded-xl w-full sm:w-48 h-28 flex-shrink-0"
                     >
                       <img
-                        src={
-                          course.thumbnail_url ||
-                          "https://via.placeholder.com/300x180/3b82f6/ffffff?text=Course"
-                        }
-                        alt={course.title}
+                        src={course.thumbnail_url}
+                        alt={defaultCoursePhoto}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         onError={(e) => {
-                          e.target.src =
-                            "https://via.placeholder.com/300x180/3b82f6/ffffff?text=Course";
+                          e.target.src = defaultCoursePhoto;
                         }}
                       />
                     </Link>

@@ -10,11 +10,11 @@ import {
   X,
   Moon,
   Sun,
-  Bell,
   Settings,
   ShoppingCart,
 } from "lucide-react";
 import { useState } from "react";
+import defaultUserPhoto from "../../../src/assets/default_user_photo.jpg";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -70,7 +70,7 @@ const Navbar = () => {
               <>
                 {user?.type === "Teacher" && (
                   <Link
-                    to="/dashboard"
+                    to="/teacher/dashboard"
                     className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium rounded-lg hover:bg-gray-100 dark:hover:bg-dark-800 transition-all"
                   >
                     Dashboard
@@ -91,12 +91,6 @@ const Navbar = () => {
                   Cart
                 </Link>
 
-                {/* Notifications */}
-                <button className="p-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg relative">
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                </button>
-
                 {/* User Menu */}
                 <div className="relative">
                   <button
@@ -107,8 +101,11 @@ const Navbar = () => {
                       {user?.image ? (
                         <img
                           src={user.image}
-                          alt={user?.username || "User"}
+                          alt={defaultUserPhoto}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.src = defaultUserPhoto;
+                          }}
                         />
                       ) : (
                         <span className="text-white text-sm font-semibold">
@@ -230,7 +227,7 @@ const Navbar = () => {
                 <>
                   {user?.type === "Teacher" && (
                     <Link
-                      to="/dashboard"
+                      to="/teacher/dashboard"
                       className="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg font-medium transition-all"
                       onClick={closeMobileMenu}
                     >

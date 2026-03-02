@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { FcGoogle } from "react-icons/fc";
+import defaultUserPhoto from "../../src/assets/default_user_photo.jpg";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -152,8 +153,11 @@ const Register = () => {
                       {imagePreview ? (
                         <img
                           src={imagePreview}
-                          alt="Profile preview"
+                          alt={defaultUserPhoto}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.src = defaultUserPhoto;
+                          }}
                         />
                       ) : (
                         <User className="h-10 w-10 text-gray-400" />

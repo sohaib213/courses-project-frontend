@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../redux/hooks";
+import api from "../services/api";
+import defaultCoursePhoto from "../../src/assets/default_course_photo.jpg";
 import {
   fetchCategories,
   selectAllCategories,
@@ -30,9 +32,18 @@ const Home = () => {
   const categoriesLoading = useAppSelector(selectCategoriesLoading);
   const categoriesError = useAppSelector(selectCategoriesError);
   const shouldRefetchCategories = useAppSelector(selectShouldRefetchCategories);
-  const { courses, isLoading: coursesLoading, error: coursesError } =
-    useAppSelector((state) => state.courses);
+  const {
+    courses,
+    isLoading: coursesLoading,
+    error: coursesError,
+    pagination,
+  } = useAppSelector((state) => state.courses);
   const [hoveredFeature, setHoveredFeature] = useState(null);
+  const [liveCounts, setLiveCounts] = useState({
+    students: null,
+    teachers: null,
+    courses: null,
+  });
   const coursesSliderRef = useRef(null);
 
   useEffect(() => {
@@ -46,6 +57,96 @@ const Home = () => {
       dispatch(fetchCourses({ page: 1, limit: 12 }));
     }
   }, [dispatch, courses.length]);
+
+  useEffect(() => {
+    let active = true;
+
+    const toCount = (responseData, primaryKey) => {
+      const payload = responseData?.data || responseData;
+      const value =
+        payload?.[primaryKey] ??
+        payload?.[primaryKey?.toLowerCase?.()] ??
+        payload?.count ??
+        payload;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const loadCounts = async () => {
+      const [studentsResult, teachersResult, coursesResult] =
+        await Promise.allSettled([
+          api.get("/users/studentsNumber"),
+          api.get("/users/teachersNumber"),
+          api.get("/courses/coursesNumber"),
+        ]);
+
+      if (!active) return;
+
+      console.log("courses count = ", coursesResult);
+      setLiveCounts((prev) => ({
+        students:
+          studentsResult.status === "fulfilled"
+            ? toCount(studentsResult.value?.data, "studentsNumber")
+            : prev.students,
+        teachers:
+          teachersResult.status === "fulfilled"
+            ? toCount(teachersResult.value?.data, "teachersNumber")
+            : prev.teachers,
+        courses:
+          coursesResult.status === "fulfilled"
+            ? toCount(coursesResult.value?.data, "coursesNumber")
+            : prev.courses,
+      }));
+    };
+
+    loadCounts();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const formatCompactNumber = (value) => {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) return "0";
+
+    return new Intl.NumberFormat("en", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(number);
+  };
+
+  const totalCoursesCount =
+    Number(
+      pagination?.total ??
+        pagination?.totalItems ??
+        pagination?.total_count ??
+        pagination?.count,
+    ) || courses.length;
+
+  const totalStudentsCount =
+    Number(
+      pagination?.students_total ??
+        pagination?.totalStudents ??
+        pagination?.studentsCount,
+    ) ||
+    courses.reduce((sum, course) => {
+      const enrolled =
+        Number(
+          course?._count?.enrollments ??
+            course?.enrollments_count ??
+            course?.students_count,
+        ) || 0;
+      return sum + enrolled;
+    }, 0);
+
+  const displayedStudentsCount = formatCompactNumber(
+    liveCounts.students ?? totalStudentsCount,
+  );
+  const displayedCoursesCount = formatCompactNumber(
+    liveCounts.courses ?? totalCoursesCount,
+  );
+  const displayedTeachersCount = formatCompactNumber(liveCounts.teachers ?? 0);
 
   const features = [
     {
@@ -79,17 +180,17 @@ const Home = () => {
 
   const stats = [
     {
-      number: "10K+",
+      number: displayedStudentsCount,
       label: "Active Students",
       icon: <Users className="h-6 w-6" />,
     },
     {
-      number: "500+",
+      number: displayedCoursesCount,
       label: "Courses",
       icon: <BookOpen className="h-6 w-6" />,
     },
     {
-      number: "200+",
+      number: displayedTeachersCount,
       label: "Expert Instructors",
       icon: <Award className="h-6 w-6" />,
     },
@@ -171,13 +272,17 @@ const Home = () => {
               {/* Quick Stats */}
               <div className="flex gap-8 pt-4">
                 <div>
-                  <div className="text-3xl font-bold">50K+</div>
+                  <div className="text-3xl font-bold">
+                    {displayedStudentsCount}
+                  </div>
                   <div className="text-white/80 dark:text-white/70">
                     Students
                   </div>
                 </div>
                 <div>
-                  <div className="text-3xl font-bold">500+</div>
+                  <div className="text-3xl font-bold">
+                    {displayedCoursesCount}
+                  </div>
                   <div className="text-white/80 dark:text-white/70">
                     Courses
                   </div>
@@ -205,10 +310,10 @@ const Home = () => {
                     </div>
                     <div>
                       <div className="font-bold text-gray-900 dark:text-gray-100">
-                        1,234 Students
+                        {displayedStudentsCount} Students
                       </div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">
-                        Enrolled this week
+                        Active learners
                       </div>
                     </div>
                   </div>
@@ -286,15 +391,11 @@ const Home = () => {
                   >
                     <div className="relative overflow-hidden rounded-xl mb-4 aspect-video">
                       <img
-                        src={
-                          course.thumbnail_url ||
-                          "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course"
-                        }
-                        alt={course.title}
+                        src={course.thumbnail_url || defaultCoursePhoto}
+                        alt={defaultCoursePhoto}
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         onError={(e) => {
-                          e.target.src =
-                            "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course";
+                          e.target.src = defaultCoursePhoto;
                         }}
                       />
                       <span className="absolute top-3 right-3 text-xs px-3 py-1.5 rounded-full font-semibold bg-white/95 dark:bg-dark-900/95 text-gray-900 dark:text-white">
@@ -391,18 +492,22 @@ const Home = () => {
               </div>
             )}
 
-            {!categoriesLoading && !categoriesError && categories.length === 0 && (
-              <div className="col-span-full text-center text-gray-600 dark:text-gray-400">
-                No categories available yet.
-              </div>
-            )}
+            {!categoriesLoading &&
+              !categoriesError &&
+              categories.length === 0 && (
+                <div className="col-span-full text-center text-gray-600 dark:text-gray-400">
+                  No categories available yet.
+                </div>
+              )}
 
             {categories.slice(0, 6).map((category, index) => {
               const categoryId = category.id || category._id;
 
               return (
                 <Link
-                  key={category.id || category._id || `${category.name}-${index}`}
+                  key={
+                    category.id || category._id || `${category.name}-${index}`
+                  }
                   to={
                     categoryId
                       ? `/courses?category_id=${encodeURIComponent(categoryId)}`

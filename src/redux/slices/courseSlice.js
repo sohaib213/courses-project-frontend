@@ -40,7 +40,7 @@ export const fetchCourseById = createAsyncThunk(
 
 export const searchCourses = createAsyncThunk(
   "courses/searchCourses",
-  async ({ searchTerm, page = 1, limit = 10 }, { rejectWithValue }) => {
+  async ({ searchTerm, page = 1, limit = 9 }, { rejectWithValue }) => {
     try {
       const data = await courseService.searchCourses(searchTerm, page, limit);
       return data;
@@ -54,7 +54,7 @@ export const searchCourses = createAsyncThunk(
 
 export const fetchCoursesByCategory = createAsyncThunk(
   "courses/fetchCoursesByCategory",
-  async ({ categoryId, page = 1, limit = 10 }, { rejectWithValue }) => {
+  async ({ categoryId, page = 1, limit = 9 }, { rejectWithValue }) => {
     try {
       const data = await courseService.getCoursesByCategory(
         categoryId,
@@ -72,7 +72,7 @@ export const fetchCoursesByCategory = createAsyncThunk(
 
 export const fetchCoursesByTeacher = createAsyncThunk(
   "courses/fetchCoursesByTeacher",
-  async ({ teacherId, page = 1, limit = 10 }, { rejectWithValue }) => {
+  async ({ teacherId, page = 1, limit = 9 }, { rejectWithValue }) => {
     try {
       const data = await courseService.getCoursesByTeacher(
         teacherId,
@@ -168,7 +168,7 @@ const initialState = {
   error: null,
   pagination: {
     currentPage: 1,
-    limit: 10,
+    limit: 9,
   },
   filters: {
     search: "",
@@ -189,16 +189,28 @@ const courseSlice = createSlice({
       state.currentCourse = null;
     },
     setFilters: (state, action) => {
-      state.filters = { ...state.filters, ...action.payload };
+      const entries = Object.entries(action.payload || {});
+      let hasChanges = false;
+
+      entries.forEach(([key, value]) => {
+        if (state.filters[key] !== value) {
+          state.filters[key] = value;
+          hasChanges = true;
+        }
+      });
+
+      if (!hasChanges) return;
     },
     resetFilters: (state) => {
       state.filters = initialState.filters;
       state.pagination.currentPage = 1;
     },
     setPage: (state, action) => {
+      if (state.pagination.currentPage === action.payload) return;
       state.pagination.currentPage = action.payload;
     },
     setLimit: (state, action) => {
+      if (state.pagination.limit === action.payload) return;
       state.pagination.limit = action.payload;
     },
   },

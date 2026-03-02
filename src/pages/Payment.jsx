@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Clock3, XCircle, AlertTriangle } from "lucide-react";
 import { cartService } from "../services/cartService";
 
 const Payment = () => {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const successFlag = searchParams.get("success");
   const [isLoading, setIsLoading] = useState(successFlag === "true");
@@ -55,6 +56,12 @@ const Payment = () => {
       active = false;
     };
   }, [successFlag]);
+
+  useEffect(() => {
+    if (!isLoading && status === "Paid") {
+      navigate("/my-courses", { replace: true });
+    }
+  }, [isLoading, status, navigate]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-dark-950 flex items-center justify-center p-4">
@@ -128,4 +135,3 @@ const Payment = () => {
 };
 
 export default Payment;
-

@@ -51,17 +51,24 @@ const Courses = () => {
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      dispatch(
-        setFilters({
-          min_price: values[0] === MIN ? undefined : values[0],
-          max_price: values[1] === MAX ? undefined : values[1],
-        }),
-      );
-      dispatch(setPage(1));
+      const nextMin = values[0] === MIN ? undefined : values[0];
+      const nextMax = values[1] === MAX ? undefined : values[1];
+      const minChanged = filters.min_price !== nextMin;
+      const maxChanged = filters.max_price !== nextMax;
+
+      if (minChanged || maxChanged) {
+        dispatch(
+          setFilters({
+            min_price: nextMin,
+            max_price: nextMax,
+          }),
+        );
+        dispatch(setPage(1));
+      }
     }, 500);
 
     return () => clearTimeout(handler);
-  }, [values, dispatch]);
+  }, [values, filters.min_price, filters.max_price, dispatch]);
 
   // Fetch categories on component mount
   useEffect(() => {
@@ -70,19 +77,19 @@ const Courses = () => {
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      dispatch(setFilters({ search: localSearch }));
-      dispatch(setPage(1));
+      if (filters.search !== localSearch) {
+        dispatch(setFilters({ search: localSearch }));
+        dispatch(setPage(1));
+      }
     }, 500); // wait 500ms after stop typing
 
     return () => {
       clearTimeout(handler); // cancel previous timeout if user types again
     };
-  }, [localSearch, dispatch]);
+  }, [localSearch, filters.search, dispatch]);
 
   useEffect(() => {
-    if (!categoryIdFromQuery) return;
-
-    dispatch(setFilters({ category_id: categoryIdFromQuery }));
+    dispatch(setFilters({ category_id: categoryIdFromQuery || "" }));
     dispatch(setPage(1));
   }, [dispatch, categoryIdFromQuery]);
 
@@ -99,7 +106,16 @@ const Courses = () => {
     };
 
     dispatch(fetchCourses(params));
-  }, [dispatch, filters, pagination.currentPage, pagination.limit]);
+  }, [
+    dispatch,
+    pagination.currentPage,
+    pagination.limit,
+    filters.search,
+    filters.category_id,
+    filters.teacher_id,
+    filters.min_price,
+    filters.max_price,
+  ]);
 
   const handleResetFilters = () => {
     setLocalSearch("");
@@ -111,16 +127,18 @@ const Courses = () => {
   };
 
   const handleCategoryFilter = (categoryId) => {
-    dispatch(setFilters({ category_id: categoryId }));
-    dispatch(setPage(1));
     const params = new URLSearchParams(searchParams);
-    params.set("category_id", categoryId);
+
+    if (String(filters.category_id) === String(categoryId)) {
+      params.delete("category_id");
+    } else {
+      params.set("category_id", categoryId);
+    }
+
     setSearchParams(params, { replace: true });
   };
 
   const handleClearCategoryFilter = () => {
-    dispatch(setFilters({ category_id: "" }));
-    dispatch(setPage(1));
     const params = new URLSearchParams(searchParams);
     params.delete("category_id");
     setSearchParams(params, { replace: true });

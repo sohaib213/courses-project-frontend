@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useAppSelector, useAppDispatch } from "../redux/hooks";
 import { fetchMyCourses } from "../redux/slices/courseSlice";
+import defaultCoursePhoto from "../../src/assets/default_course_photo.jpg";
 
 const MyCourses = () => {
   const dispatch = useAppDispatch();
@@ -283,21 +284,17 @@ const MyCourses = () => {
                 /* Grid View */
                 <Link
                   key={course.id}
-                  to={`/courses/${course.id}/learn`}
+                  to={`/courses/${course.id}`}
                   className="card-hover group"
                 >
                   {/* Thumbnail */}
                   <div className="relative overflow-hidden rounded-xl mb-4 aspect-video">
                     <img
-                      src={
-                        course.thumbnail_url ||
-                        "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course"
-                      }
-                      alt={course.title}
+                      src={course.thumbnail_url || defaultCoursePhoto}
+                      alt={defaultCoursePhoto}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       onError={(e) => {
-                        e.target.src =
-                          "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course";
+                        e.target.src = defaultCoursePhoto;
                       }}
                     />
 
@@ -371,15 +368,11 @@ const MyCourses = () => {
                   {/* Thumbnail */}
                   <div className="relative overflow-hidden rounded-xl w-full sm:w-48 h-32 flex-shrink-0">
                     <img
-                      src={
-                        course.thumbnail_url ||
-                        "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course"
-                      }
-                      alt={course.title}
+                      src={course.thumbnail_url || defaultCoursePhoto}
+                      alt={defaultCoursePhoto}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       onError={(e) => {
-                        e.target.src =
-                          "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course";
+                        e.target.src = defaultCoursePhoto;
                       }}
                     />
 

@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { useSelector } from "react-redux";
+import { useAppDispatch } from "../redux/hooks";
+import { checkAuth } from "../redux/slices/authSlice";
 import {
   ChevronLeft,
   ChevronRight,
   CheckCircle,
-  Circle,
-  Lock,
   BookOpen,
   PlayCircle,
   FileText,
@@ -13,14 +14,64 @@ import {
   HelpCircle,
   Award,
   Download,
-  Menu,
   X,
+  MessageSquare,
+  Send,
 } from "lucide-react";
+import { io } from "socket.io-client";
 import api from "../services/api";
 import toast from "react-hot-toast";
+import defaultCoursePhoto from "../../src/assets/default_course_photo.jpg";
+
+const CHAT_EVENTS = {
+  JOIN_COURSE: "join-course",
+  LEAVE_COURSE: "leave-course",
+  COURSE_MESSAGE: "course-message",
+  NEW_MESSAGE: "new-message",
+  ERROR: "chat-error",
+  JOINED_COURSE: "joined-course",
+};
+
+const getSocketBaseUrl = () => {
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+  return apiUrl.replace(/\/api\/?$/, "");
+};
+
+const formatChatTime = (rawValue) => {
+  const formatTime = (date) =>
+    date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  if (!rawValue) return formatTime(new Date());
+  const date = new Date(rawValue);
+  if (!Number.isNaN(date.getTime())) return formatTime(date);
+
+  const rawText = String(rawValue).trim();
+  const withAmPm = rawText.match(/^(\d{1,2}:\d{2})(?::\d{2})?\s*([AaPp][Mm])$/);
+  if (withAmPm) {
+    return `${withAmPm[1]} ${withAmPm[2].toUpperCase()}`;
+  }
+
+  const hourMinuteOnly = rawText.match(/^(\d{1,2}:\d{2})(?::\d{2})?$/);
+  if (hourMinuteOnly) return hourMinuteOnly[1];
+
+  return rawText;
+};
+
+const getQuizDraftStorageKey = (courseId, lessonId) =>
+  `course-learning-quiz-draft:${courseId}:${lessonId}`;
 
 const CourseLearning = () => {
-  const { courseId } = useParams();
+  const dispatch = useAppDispatch();
+  const authUser = useSelector((state) => state.auth?.user);
+  const currentUsername = String(
+    authUser?.username || authUser?.name || authUser?.email || "",
+  ).trim();
+
+  const { courseId: routeCourseId, id: routeId } = useParams();
+  const courseId = routeCourseId || routeId;
   const navigate = useNavigate();
 
   const [course, setCourse] = useState(null);
@@ -29,12 +80,20 @@ const CourseLearning = () => {
   const [currentLesson, setCurrentLesson] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCompletingLesson, setIsCompletingLesson] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizQuestionsByLessonId, setQuizQuestionsByLessonId] = useState({});
   const [isLoadingQuizQuestions, setIsLoadingQuizQuestions] = useState(false);
   const [quizSubmissionByLessonId, setQuizSubmissionByLessonId] = useState({});
   const [isLoadingQuizSubmission, setIsLoadingQuizSubmission] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isChatConnected, setIsChatConnected] = useState(false);
+  const [isChatConnecting, setIsChatConnecting] = useState(false);
+  const [chatConnectionError, setChatConnectionError] = useState("");
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const socketRef = useRef(null);
+  const chatMessagesContainerRef = useRef(null);
+  const socketBaseUrl = useMemo(() => getSocketBaseUrl(), []);
 
   const getCompletedLessonsCount = (enrollmentData = enrollment) =>
     Number(enrollmentData?.current_lesson_order || 0);
@@ -127,12 +186,48 @@ const CourseLearning = () => {
       }));
 
   useEffect(() => {
-    fetchCourseData();
-  }, [courseId]);
+    if (!currentLesson?.id || !isQuizLesson) {
+      setQuizAnswers({});
+      return;
+    }
+
+    const storageKey = getQuizDraftStorageKey(courseId, currentLesson.id);
+    const storedDraft = localStorage.getItem(storageKey);
+
+    if (!storedDraft) {
+      setQuizAnswers({});
+      return;
+    }
+
+    try {
+      const parsedDraft = JSON.parse(storedDraft);
+      setQuizAnswers(
+        parsedDraft && typeof parsedDraft === "object" ? parsedDraft : {},
+      );
+    } catch {
+      setQuizAnswers({});
+    }
+  }, [courseId, currentLesson?.id, isQuizLesson]);
 
   useEffect(() => {
-    setQuizAnswers({});
-  }, [currentLesson?.id]);
+    if (!currentLesson?.id || !isQuizLesson) return;
+    if (hasSubmittedCurrentQuiz) return;
+
+    const storageKey = getQuizDraftStorageKey(courseId, currentLesson.id);
+    localStorage.setItem(storageKey, JSON.stringify(quizAnswers));
+  }, [
+    courseId,
+    currentLesson?.id,
+    isQuizLesson,
+    quizAnswers,
+    hasSubmittedCurrentQuiz,
+  ]);
+
+  useEffect(() => {
+    if (!currentLesson?.id || !isQuizLesson || !hasSubmittedCurrentQuiz) return;
+    const storageKey = getQuizDraftStorageKey(courseId, currentLesson.id);
+    localStorage.removeItem(storageKey);
+  }, [courseId, currentLesson?.id, isQuizLesson, hasSubmittedCurrentQuiz]);
 
   useEffect(() => {
     if (!currentLesson?.id || !isQuizLesson) return;
@@ -204,72 +299,203 @@ const CourseLearning = () => {
     fetchLessonSubmission();
   }, [currentLesson?.id, isQuizLesson, currentLessonSubmissionState]);
 
-  const fetchCourseData = async () => {
-    try {
-      setIsLoading(true);
+  const fetchCourseData = useCallback(
+    async (options = {}) => {
+      const { selectCurrentLesson = false } = options;
 
-      // Fetch course details
-      const courseResponse = await api.get(`/courses/${courseId}`);
-      const courseData = courseResponse.data.data || courseResponse.data;
-      setCourse(courseData);
+      try {
+        setIsLoading(true);
 
-      // Fetch user's enrollment
-      const enrollmentResponse = await api.get(`/enrollments`);
-      const enrollments =
-        enrollmentResponse.data.data || enrollmentResponse.data;
-      const userEnrollment = enrollments.find(
-        (e) =>
-          String(e.course_id) === String(courseId) ||
-          String(e.courses?.id) === String(courseId),
-      );
+        // Fetch course details
+        const courseResponse = await api.get(`/courses/${courseId}`);
+        const courseData = courseResponse.data.data || courseResponse.data;
+        setCourse(courseData);
 
-      if (!userEnrollment) {
-        toast.error("You are not enrolled in this course");
-        navigate(`/courses/${courseId}`);
-        return;
+        // Fetch user's enrollment
+        const enrollmentResponse = await api.get(`/enrollments`);
+        const enrollments =
+          enrollmentResponse.data.data || enrollmentResponse.data;
+        const userEnrollment = enrollments.find(
+          (e) =>
+            String(e.course_id) === String(courseId) ||
+            String(e.courses?.id) === String(courseId),
+        );
+
+        if (!userEnrollment) {
+          toast.error("You are not enrolled in this course");
+          navigate(`/courses/${courseId}`);
+          return;
+        }
+
+        setEnrollment(userEnrollment);
+
+        // Fetch lessons
+        const lessonsResponse = await api.get(`/lessons/course/${courseId}`);
+        const lessonsData = lessonsResponse.data.data || lessonsResponse.data;
+        const lessonsArray = Array.isArray(lessonsData)
+          ? lessonsData
+          : lessonsData?.lessons || [];
+        setLessons(lessonsArray);
+
+        // Set current lesson based on progress
+        const completedLessons = Number(
+          userEnrollment?.current_lesson_order || 0,
+        );
+        const orderedLessons = [...lessonsArray]
+          .map((lesson, index) => {
+            const rawOrder = Number(lesson?.order ?? lesson?.order_number);
+            const normalizedOrder = Number.isFinite(rawOrder)
+              ? rawOrder
+              : index + 1;
+
+            return {
+              ...lesson,
+              _order: normalizedOrder,
+            };
+          })
+          .sort((a, b) => a._order - b._order);
+
+        const currentIndex = Math.min(
+          completedLessons,
+          Math.max(orderedLessons.length - 1, 0),
+        );
+        const nextLesson = orderedLessons[currentIndex] || null;
+        if (selectCurrentLesson) {
+          setCurrentLesson(nextLesson);
+        } else {
+          setCurrentLesson((previousLesson) => {
+            if (!previousLesson?.id) return null;
+            return (
+              orderedLessons.find(
+                (lesson) => String(lesson.id) === String(previousLesson.id),
+              ) || null
+            );
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching course data:", error);
+        toast.error("Failed to load course");
+      } finally {
+        setIsLoading(false);
       }
+    },
+    [courseId, navigate],
+  );
 
-      setEnrollment(userEnrollment);
+  useEffect(() => {
+    fetchCourseData();
+  }, [fetchCourseData]);
 
-      // Fetch lessons
-      const lessonsResponse = await api.get(`/lessons/course/${courseId}`);
-      const lessonsData = lessonsResponse.data.data || lessonsResponse.data;
-      const lessonsArray = Array.isArray(lessonsData)
-        ? lessonsData
-        : lessonsData?.lessons || [];
-      setLessons(lessonsArray);
+  useEffect(() => {
+    if (!enrollment?.id || !courseId) return;
 
-      // Set current lesson based on progress
-      const completedLessons = getCompletedLessonsCount(userEnrollment);
-      const orderedLessons = [...lessonsArray]
-        .map((lesson, index) => {
-          const rawOrder = Number(lesson?.order ?? lesson?.order_number);
-          const normalizedOrder = Number.isFinite(rawOrder)
-            ? rawOrder
-            : index + 1;
-
-          return {
-            ...lesson,
-            _order: normalizedOrder,
-          };
-        })
-        .sort((a, b) => a._order - b._order);
-
-      const currentIndex = Math.min(
-        completedLessons,
-        Math.max(orderedLessons.length - 1, 0),
-      );
-      const nextLesson = orderedLessons[currentIndex] || null;
-      setCurrentLesson(nextLesson);
-    } catch (error) {
-      console.error("Error fetching course data:", error);
-      toast.error("Failed to load course");
-    } finally {
-      setIsLoading(false);
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setChatConnectionError("Please login to use course chat.");
+      return;
     }
-  };
 
-  const handleCompleteLesson = async () => {
+    setIsChatConnecting(true);
+    setChatConnectionError("");
+    setChatMessages([]);
+
+    const socket = io(socketBaseUrl, {
+      transports: ["websocket", "polling"],
+      auth: {
+        token,
+        bearerToken: `Bearer ${token}`,
+      },
+      query: {
+        token,
+        bearerToken: `Bearer ${token}`,
+      },
+    });
+
+    socketRef.current = socket;
+
+    const handleConnect = () => {
+      setIsChatConnected(true);
+      setIsChatConnecting(false);
+      socket.emit(CHAT_EVENTS.JOIN_COURSE, { courseId: String(courseId) });
+    };
+
+    const handleDisconnect = () => {
+      setIsChatConnected(false);
+    };
+
+    const handleJoinedCourse = (payload) => {
+      const previousMessages = Array.isArray(payload?.previousMessages)
+        ? payload.previousMessages
+        : [];
+
+      const mappedMessages = previousMessages.map((message, index) => {
+        const username = String(message?.username || "Student");
+        return {
+          id: `history-${index}-${username}-${message?.time || ""}`,
+          content: String(message?.content || ""),
+          username,
+          time: formatChatTime(message?.time),
+          isOwn: username === currentUsername,
+        };
+      });
+
+      setChatMessages(mappedMessages);
+    };
+
+    const handleNewMessage = (payload) => {
+      const message = payload?.message || {};
+      const username = String(
+        payload?.username || message?.username || "Student",
+      );
+      const normalizedMessage = {
+        id:
+          message?.id ||
+          `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        content: String(message?.content || ""),
+        username,
+        time: formatChatTime(message?.createdat || message?.createdAt),
+        isOwn: username === currentUsername,
+      };
+
+      if (!normalizedMessage.content.trim()) return;
+      setChatMessages((prev) => [...prev, normalizedMessage]);
+    };
+
+    const handleChatError = (message) => {
+      const errorMessage =
+        typeof message === "string" ? message : "Chat connection failed";
+      setChatConnectionError(errorMessage);
+      setIsChatConnecting(false);
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on(CHAT_EVENTS.JOINED_COURSE, handleJoinedCourse);
+    socket.on(CHAT_EVENTS.NEW_MESSAGE, handleNewMessage);
+    socket.on(CHAT_EVENTS.ERROR, handleChatError);
+
+    return () => {
+      socket.emit(CHAT_EVENTS.LEAVE_COURSE, { courseId: String(courseId) });
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off(CHAT_EVENTS.JOINED_COURSE, handleJoinedCourse);
+      socket.off(CHAT_EVENTS.NEW_MESSAGE, handleNewMessage);
+      socket.off(CHAT_EVENTS.ERROR, handleChatError);
+      socket.disconnect();
+      socketRef.current = null;
+      setIsChatConnected(false);
+      setIsChatConnecting(false);
+    };
+  }, [courseId, currentUsername, enrollment?.id, socketBaseUrl]);
+
+  useEffect(() => {
+    if (!isChatOpen) return;
+    const container = chatMessagesContainerRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  }, [chatMessages, isChatOpen]);
+
+  const handleCompleteLesson = async ({ returnToOverview = true } = {}) => {
     if (!enrollment?.id) return;
 
     try {
@@ -278,10 +504,16 @@ const CourseLearning = () => {
 
       toast.success("Lesson completed! 🎉");
 
-      // Refresh enrollment data
-      await fetchCourseData();
-    } catch {
+      if (returnToOverview) {
+        // Return to startup view, then refresh progress data.
+        setCurrentLesson(null);
+      }
+      await fetchCourseData({ selectCurrentLesson: false });
+      // Refresh auth user so profile stats (e.g. points) reflect backend updates.
+      dispatch(checkAuth());
+    } catch (error) {
       toast.error("Failed to mark lesson as complete");
+      console.log(error);
     } finally {
       setIsCompletingLesson(false);
     }
@@ -305,7 +537,8 @@ const CourseLearning = () => {
 
     try {
       setIsCompletingLesson(true);
-      const submittedLesson = currentLesson;
+      const storageKey = getQuizDraftStorageKey(courseId, currentLesson.id);
+      localStorage.setItem(storageKey, JSON.stringify(quizAnswers));
 
       const answers = quizQuestions.map((question, index) => {
         const questionKey = question?.id || index;
@@ -375,10 +608,10 @@ const CourseLearning = () => {
           quizGrade: submissionData?.quize_grade ?? null,
         },
       }));
+      localStorage.removeItem(storageKey);
 
       toast.success("Quiz submitted successfully");
-      await handleCompleteLesson();
-      setCurrentLesson(submittedLesson);
+      await handleCompleteLesson({ returnToOverview: false });
     } catch (error) {
       console.error("Failed to submit quiz:", error);
       const message =
@@ -419,6 +652,23 @@ const CourseLearning = () => {
     return Math.min(100, Math.round((current / total) * 100));
   };
 
+  const handleSendMessage = () => {
+    const content = chatInput.trim();
+    if (!content) return;
+
+    const socket = socketRef.current;
+    if (!socket || !isChatConnected) {
+      toast.error("Chat is not connected yet");
+      return;
+    }
+
+    socket.emit(CHAT_EVENTS.COURSE_MESSAGE, {
+      courseId: String(courseId),
+      content,
+    });
+    setChatInput("");
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-dark-950 flex items-center justify-center">
@@ -428,20 +678,23 @@ const CourseLearning = () => {
   }
 
   const progress = calculateProgress();
+  const totalLessons = normalizedLessons.length;
+  const completedLessons = getCompletedLessonsCount();
+  const remainingLessons = Math.max(totalLessons - completedLessons, 0);
+  const currentLessonNumber = currentLesson?._order || 1;
+  const courseThumbnail =
+    course?.thumbnail_url || defaultCoursePhoto;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-dark-950 flex flex-col">
+    <div
+      className={`min-h-screen bg-gray-50 dark:bg-dark-950 flex flex-col ${
+        isChatOpen ? "lg:pr-[24rem]" : ""
+      }`}
+    >
       {/* Top Header */}
       <div className="bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-700 sticky top-0 z-20">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg transition-colors lg:hidden"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-
             <Link
               to="/my-courses"
               className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
@@ -479,96 +732,36 @@ const CourseLearning = () => {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - Lessons List */}
-        <div
-          className={`${
-            isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-          } lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-30 w-80 bg-white dark:bg-dark-900 border-r border-gray-200 dark:border-dark-700 flex flex-col transition-transform duration-300 ease-in-out`}
-        >
-          {/* Sidebar Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-dark-700">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="font-bold text-gray-900 dark:text-white">
-                Course Content
-              </h2>
-              <button
-                onClick={() => setIsSidebarOpen(false)}
-                className="lg:hidden p-1 hover:bg-gray-100 dark:hover:bg-dark-800 rounded"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {lessons.length} lessons • {getCompletedLessonsCount()} completed
+      <div className="px-4 py-3 bg-white/80 dark:bg-dark-900/80 border-b border-gray-200 dark:border-dark-700 backdrop-blur-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900 px-4 py-3">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              Current lesson
+            </p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+              {currentLessonNumber} / {Math.max(totalLessons, 1)}
             </p>
           </div>
-
-          {/* Lessons List */}
-          <div className="flex-1 overflow-y-auto">
-            {normalizedLessons.map((lesson) => {
-              const lessonOrder = lesson._order;
-              const isUnlocked = isLessonUnlocked(lessonOrder);
-              const isCompleted = isLessonCompleted(lessonOrder);
-              const isCurrent = currentLesson?.id === lesson.id;
-
-              return (
-                <button
-                  key={lesson.id}
-                  onClick={() => isUnlocked && setCurrentLesson(lesson)}
-                  disabled={!isUnlocked}
-                  className={`w-full text-left p-4 border-b border-gray-200 dark:border-dark-700 transition-all ${
-                    isCurrent
-                      ? "bg-primary-50 dark:bg-primary-900/20 border-l-4 border-l-primary-600"
-                      : isCompleted
-                        ? "bg-green-50 dark:bg-green-900/10 hover:bg-green-100 dark:hover:bg-green-900/20"
-                        : isUnlocked
-                          ? "hover:bg-gray-50 dark:hover:bg-dark-800"
-                          : "opacity-50 cursor-not-allowed"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Status Icon */}
-                    <div className="flex-shrink-0 mt-0.5">
-                      {isCompleted ? (
-                        <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-                      ) : isUnlocked ? (
-                        <Circle className="h-5 w-5 text-gray-400" />
-                      ) : (
-                        <Lock className="h-5 w-5 text-gray-400" />
-                      )}
-                    </div>
-
-                    {/* Lesson Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium text-gray-500 dark:text-gray-500">
-                          Lesson {lessonOrder}
-                        </span>
-                        {getLessonIcon(lesson.content_type)}
-                      </div>
-                      <h3
-                        className={`font-medium mb-1 ${
-                          isCurrent
-                            ? "text-primary-600 dark:text-primary-400"
-                            : "text-gray-900 dark:text-white"
-                        }`}
-                      >
-                        {lesson.title}
-                      </h3>
-                      {lesson.duration && (
-                        <p className="text-xs text-gray-500 dark:text-gray-500">
-                          {lesson.duration} min
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+          <div className="rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900 px-4 py-3">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              Completed
+            </p>
+            <p className="text-sm font-semibold text-green-700 dark:text-green-300">
+              {completedLessons} lessons
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900 px-4 py-3">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              Remaining
+            </p>
+            <p className="text-sm font-semibold text-primary-700 dark:text-primary-300">
+              {remainingLessons} lessons
+            </p>
           </div>
         </div>
+      </div>
 
+      <div className="flex flex-1 overflow-hidden">
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {currentLesson ? (
@@ -620,7 +813,7 @@ const CourseLearning = () => {
                         {currentQuizSubmission?.submission && (
                           <div className="mb-4 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                             <p className="text-sm font-semibold text-green-800 dark:text-green-300">
-                              Your grade:{" "}
+                              Total mark:{" "}
                               {currentQuizSubmission.submission.grade ?? 0}
                               {currentQuizSubmission.quizGrade !== null
                                 ? ` / ${currentQuizSubmission.quizGrade}`
@@ -656,42 +849,95 @@ const CourseLearning = () => {
                               const selectedOptionId =
                                 submittedAnswer?.mcq_tf_answers
                                   ?.selected_option_id;
-                              const selectedOption = Array.isArray(
-                                question?.options,
-                              )
-                                ? question.options.find(
-                                    (option) =>
-                                      typeof option !== "string" &&
-                                      option?.id === selectedOptionId,
-                                  )
-                                : null;
-                              const correctOption = Array.isArray(
-                                question?.options,
-                              )
-                                ? question.options.find(
-                                    (option) =>
-                                      typeof option !== "string" &&
-                                      option?.is_correct,
-                                  )
-                                : null;
                               const questionText =
                                 question?.question_text ||
                                 question?.question ||
                                 question?.title ||
                                 question?.text ||
                                 `Question ${questionIndex + 1}`;
+                              const submittedQuestion =
+                                submittedAnswer?.questions;
                               const options = Array.isArray(question?.options)
                                 ? question.options
-                                : [];
+                                : Array.isArray(submittedQuestion?.options)
+                                  ? submittedQuestion.options
+                                  : [];
+                              const normalizeValue = (value) =>
+                                String(value ?? "")
+                                  .trim()
+                                  .toLowerCase();
+                              const correctCandidates = [
+                                question?.correct_option_id,
+                                question?.correctOptionId,
+                                question?.correct_option,
+                                question?.correctOption,
+                                question?.correct_answer,
+                                question?.correctAnswer,
+                                question?.answer,
+                                question?.right_answer,
+                                question?.rightAnswer,
+                                submittedQuestion?.correct_option_id,
+                                submittedQuestion?.correctOptionId,
+                                submittedQuestion?.correct_option,
+                                submittedQuestion?.correctOption,
+                                submittedQuestion?.correct_answer,
+                                submittedQuestion?.correctAnswer,
+                                submittedQuestion?.answer,
+                                submittedQuestion?.right_answer,
+                                submittedQuestion?.rightAnswer,
+                                submittedAnswer?.mcq_tf_answers
+                                  ?.correct_option_id,
+                                submittedAnswer?.mcq_tf_answers
+                                  ?.correctOptionId,
+                                submittedAnswer?.mcq_tf_answers
+                                  ?.correct_option_text,
+                                submittedAnswer?.mcq_tf_answers
+                                  ?.correctOptionText,
+                                submittedAnswer?.mcq_tf_answers?.correct_answer,
+                                submittedAnswer?.mcq_tf_answers?.correctAnswer,
+                              ]
+                                .map((value) => normalizeValue(value))
+                                .filter(Boolean);
+                              const configuredQuestionGrade = Number(
+                                question?.question_grade ?? 1,
+                              );
+                              const questionMaxGrade =
+                                Number.isFinite(configuredQuestionGrade) &&
+                                configuredQuestionGrade > 0
+                                  ? configuredQuestionGrade
+                                  : 1;
+                              const isCorrectMcqTf = Boolean(
+                                submittedAnswer?.mcq_tf_answers?.isCorrect,
+                              );
+                              const essayScoreValue = Number(
+                                submittedAnswer?.essay_answers?.ai_score ?? 0,
+                              );
+                              const questionScore = hasSubmittedCurrentQuiz
+                                ? isEssayQuestion
+                                  ? Number.isFinite(essayScoreValue)
+                                    ? essayScoreValue
+                                    : 0
+                                  : isCorrectMcqTf
+                                    ? questionMaxGrade
+                                    : 0
+                                : null;
 
                               return (
                                 <div
                                   key={question?.id || questionIndex}
                                   className="p-4 rounded-lg border border-gray-200 dark:border-dark-700"
                                 >
-                                  <p className="font-medium text-gray-900 dark:text-white mb-3">
-                                    {questionIndex + 1}. {questionText}
-                                  </p>
+                                  <div className="flex items-start justify-between gap-3 mb-3">
+                                    <p className="font-medium text-gray-900 dark:text-white">
+                                      {questionIndex + 1}. {questionText}
+                                    </p>
+                                    {hasSubmittedCurrentQuiz && (
+                                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 whitespace-nowrap">
+                                        {questionScore ?? 0} /{" "}
+                                        {questionMaxGrade}
+                                      </span>
+                                    )}
+                                  </div>
 
                                   {!isEssayQuestion && options.length > 0 ? (
                                     <div className="space-y-2">
@@ -715,31 +961,95 @@ const CourseLearning = () => {
                                               option?.value ||
                                               option?.option_value ||
                                               `Option ${optionIndex + 1}`;
+                                        const optionId =
+                                          typeof option === "string"
+                                            ? option
+                                            : option?.id || optionValue;
+                                        const optionMatchKeys = [
+                                          normalizeValue(optionId),
+                                          normalizeValue(optionValue),
+                                          normalizeValue(optionLabel),
+                                          normalizeValue(optionIndex),
+                                          normalizeValue(optionIndex + 1),
+                                          normalizeValue(option?.value),
+                                          normalizeValue(option?.option_value),
+                                          normalizeValue(option?.option_text),
+                                          normalizeValue(option?.text),
+                                          normalizeValue(option?.label),
+                                        ].filter(Boolean);
+                                        const isOptionCorrect = Boolean(
+                                          (typeof option !== "string" &&
+                                            (option?.is_correct ||
+                                              option?.isCorrect ||
+                                              option?.correct)) ||
+                                          correctCandidates.some((candidate) =>
+                                            optionMatchKeys.includes(candidate),
+                                          ),
+                                        );
+                                        const normalizedSelectedOption =
+                                          normalizeValue(selectedOptionId);
+                                        const isSubmittedSelectedOption =
+                                          hasSubmittedCurrentQuiz &&
+                                          optionMatchKeys.includes(
+                                            normalizedSelectedOption,
+                                          );
+                                        const isSelectedWrongOption =
+                                          isSubmittedSelectedOption &&
+                                          !isOptionCorrect;
+                                        const isCorrectOptionToShow =
+                                          hasSubmittedCurrentQuiz &&
+                                          isOptionCorrect;
 
                                         return (
                                           <label
                                             key={`${questionKey}-${optionIndex}`}
-                                            className="flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300"
+                                            className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 transition-colors ${
+                                              isCorrectOptionToShow
+                                                ? "bg-green-50 dark:bg-green-900/20"
+                                                : isSelectedWrongOption
+                                                  ? "bg-red-50 dark:bg-red-900/20"
+                                                  : ""
+                                            } ${hasSubmittedCurrentQuiz ? "cursor-default" : "cursor-pointer"} text-gray-700 dark:text-gray-300`}
                                           >
-                                            <input
-                                              type="radio"
-                                              name={`quiz-question-${questionKey}`}
-                                              checked={
-                                                hasSubmittedCurrentQuiz
-                                                  ? optionValue ===
-                                                    selectedOptionId
-                                                  : quizAnswers[questionKey] ===
-                                                    optionValue
-                                              }
-                                              disabled={hasSubmittedCurrentQuiz}
-                                              onChange={() =>
-                                                setQuizAnswers((prev) => ({
-                                                  ...prev,
-                                                  [questionKey]: optionValue,
-                                                }))
-                                              }
-                                            />
-                                            <span>{optionLabel}</span>
+                                            <div className="flex items-center gap-2">
+                                              <input
+                                                type="radio"
+                                                name={`quiz-question-${questionKey}`}
+                                                checked={
+                                                  hasSubmittedCurrentQuiz
+                                                    ? optionId ===
+                                                      selectedOptionId
+                                                    : quizAnswers[
+                                                        questionKey
+                                                      ] === optionValue
+                                                }
+                                                disabled={
+                                                  hasSubmittedCurrentQuiz
+                                                }
+                                                onChange={() =>
+                                                  setQuizAnswers((prev) => ({
+                                                    ...prev,
+                                                    [questionKey]: optionValue,
+                                                  }))
+                                                }
+                                              />
+                                              <span>{optionLabel}</span>
+                                            </div>
+                                            {hasSubmittedCurrentQuiz &&
+                                              (isCorrectOptionToShow ||
+                                                isSubmittedSelectedOption) && (
+                                                <span
+                                                  className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                                                    isCorrectOptionToShow
+                                                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                                                      : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                                                  }`}
+                                                >
+                                                  {isCorrectOptionToShow
+                                                    ? "Correct Answer"
+                                                    : "Your Answer"}
+                                                </span>
+                                              )}
                                           </label>
                                         );
                                       })}
@@ -779,13 +1089,7 @@ const CourseLearning = () => {
                                           {submittedAnswer.mcq_tf_answers
                                             ?.isCorrect
                                             ? "Correct"
-                                            : "Incorrect"}
-                                          {selectedOption?.option_text
-                                            ? ` • Your answer: ${selectedOption.option_text}`
-                                            : ""}
-                                          {correctOption?.option_text
-                                            ? ` • Correct answer: ${correctOption.option_text}`
-                                            : ""}
+                                            : "Wrong"}
                                         </p>
                                       )}
 
@@ -903,11 +1207,23 @@ const CourseLearning = () => {
                           <CheckCircle className="h-5 w-5" />
                           <span>
                             {isQuizLesson
-                              ? "Submit Quiz & Continue"
+                              ? "Submit Quiz"
                               : "Complete & Continue"}
                           </span>
                         </>
                       )}
+                    </button>
+                  )}
+
+                  {isQuizLesson && hasSubmittedCurrentQuiz && (
+                    <button
+                      onClick={() => {
+                        setCurrentLesson(null);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className="px-6 py-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-dark-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-100 dark:hover:bg-dark-700 transition-all"
+                    >
+                      Course Page
                     </button>
                   )}
 
@@ -940,26 +1256,225 @@ const CourseLearning = () => {
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center p-8">
-              <div className="text-center">
-                <BookOpen className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                  No Lesson Selected
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Select a lesson from the sidebar to begin learning
-                </p>
+            <div className="flex-1 overflow-y-auto p-4 md:p-8">
+              <div className="max-w-5xl mx-auto">
+                <div className="rounded-2xl overflow-hidden bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-700 shadow-sm mb-6">
+                  <div className="relative h-52 md:h-64">
+                    <img
+                      src={courseThumbnail}
+                      alt={defaultCoursePhoto}
+                      className="w-full h-full object-cover"
+                      onError={(event) => {
+                        event.currentTarget.src = defaultCoursePhoto;
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-5 md:p-6 text-white">
+                      <p className="text-xs md:text-sm font-medium text-white/80 mb-2">
+                        Ready to learn
+                      </p>
+                      <h2 className="text-2xl md:text-3xl font-bold line-clamp-2">
+                        {course?.title}
+                      </h2>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-dark-900 border border-gray-200 dark:border-dark-700 rounded-2xl p-5 md:p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-white">
+                      Pick a lesson to start
+                    </h3>
+                    <span className="text-xs md:text-sm text-gray-600 dark:text-gray-400">
+                      {totalLessons} total lessons
+                    </span>
+                  </div>
+
+                  {normalizedLessons.length === 0 ? (
+                    <p className="text-gray-600 dark:text-gray-400">
+                      No lessons are available in this course yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {normalizedLessons.map((lesson) => {
+                        const lessonOrder = lesson._order;
+                        const isUnlocked = isLessonUnlocked(lessonOrder);
+                        const isCompleted = isLessonCompleted(lessonOrder);
+
+                        return (
+                          <div
+                            key={lesson.id}
+                            className={`rounded-xl border p-4 ${
+                              isUnlocked
+                                ? "border-gray-200 dark:border-dark-700"
+                                : "border-gray-100 dark:border-dark-800 opacity-60"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                                  Lesson {lessonOrder}
+                                </p>
+                                <h4 className="font-semibold text-gray-900 dark:text-white mb-1">
+                                  {lesson.title}
+                                </h4>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                                  {getLessonIcon(lesson.content_type)}
+                                  <span className="capitalize">
+                                    {lesson.content_type || "lesson"}
+                                  </span>
+                                  {lesson.duration ? (
+                                    <span>• {lesson.duration} min</span>
+                                  ) : null}
+                                </p>
+                              </div>
+
+                              <button
+                                onClick={() =>
+                                  isUnlocked && setCurrentLesson(lesson)
+                                }
+                                disabled={!isUnlocked}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${
+                                  isUnlocked
+                                    ? "bg-primary-600 text-white hover:bg-primary-700"
+                                    : "bg-gray-100 dark:bg-dark-800 text-gray-500 cursor-not-allowed"
+                                }`}
+                              >
+                                {isCompleted ? "Review Lesson" : "Start Lesson"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
+      <div
+        className={`fixed inset-y-0 right-0 z-40 w-full sm:w-96 bg-white dark:bg-dark-900 border-l border-gray-200 dark:border-dark-700 shadow-2xl transition-transform duration-300 ${
+          isChatOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="h-full flex flex-col">
+          <div className="p-4 border-b border-gray-200 dark:border-dark-700 flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                Course Chat
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {isChatConnecting
+                  ? "Connecting..."
+                  : isChatConnected
+                    ? "Live now"
+                    : "Disconnected"}
+              </p>
+            </div>
+            <button
+              onClick={() => setIsChatOpen(false)}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-800"
+              aria-label="Close chat"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {chatConnectionError ? (
+            <div className="m-4 p-3 text-sm rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/40">
+              {chatConnectionError}
+            </div>
+          ) : null}
+
+          <div
+            ref={chatMessagesContainerRef}
+            className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
+          >
+            {chatMessages.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-center text-sm text-gray-500 dark:text-gray-400">
+                <p>
+                  No messages yet.
+                  <br />
+                  Start the discussion with your classmates.
+                </p>
+              </div>
+            ) : (
+              chatMessages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.isOwn ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-3 py-2 ${
+                      message.isOwn
+                        ? "bg-primary-600 text-white"
+                        : "bg-gray-100 dark:bg-dark-800 text-gray-900 dark:text-gray-100"
+                    }`}
+                  >
+                    <p className="text-xs font-semibold opacity-80 mb-1">
+                      {message.username}
+                    </p>
+                    <p className="text-sm whitespace-pre-wrap break-words">
+                      {message.content}
+                    </p>
+                    <p className="text-[10px] opacity-70 mt-1">
+                      {message.time}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="p-3 border-t border-gray-200 dark:border-dark-700">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="Write a message..."
+                className="flex-1 px-3 py-2 rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                disabled={!isChatConnected}
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={!isChatConnected || !chatInput.trim()}
+                className="px-3 py-2 rounded-xl bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Send message"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={() => setIsChatOpen((prev) => !prev)}
+        className={`fixed bottom-6 z-50 inline-flex items-center gap-2 px-4 py-3 rounded-full bg-primary-600 text-white shadow-xl hover:bg-primary-700 transition-all ${
+          isChatOpen ? "right-6 lg:right-[25rem]" : "right-6"
+        }`}
+        aria-label={isChatOpen ? "Close chat" : "Open chat"}
+      >
+        <MessageSquare className="h-4 w-4" />
+        <span className="text-sm font-medium">
+          {isChatOpen ? "Close Chat" : "Open Chat"}
+        </span>
+      </button>
+
+      {isChatOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 bg-black/30 z-30 lg:hidden"
+          onClick={() => setIsChatOpen(false)}
         />
       )}
     </div>

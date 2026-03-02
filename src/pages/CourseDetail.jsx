@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { cartService } from "../services/cartService";
+import defaultCoursePhoto from "../../src/assets/default_course_photo.jpg";
+import defaultUserPhoto from "../../src/assets/default_user_photo.jpg";
 
 const CourseDetail = () => {
   const { id } = useParams();
@@ -36,6 +38,7 @@ const CourseDetail = () => {
   const { isAuthenticated } = useAppSelector((state) => state.auth);
   const [enrolling, setEnrolling] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
+  const [isInCart, setIsInCart] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -46,6 +49,40 @@ const CourseDetail = () => {
       dispatch(clearCurrentCourse());
     };
   }, [id, dispatch]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const checkIfCourseInCart = async () => {
+      if (!id || !isAuthenticated) {
+        if (mounted) setIsInCart(false);
+        return;
+      }
+
+      try {
+        const response = await cartService.getActiveCartItems();
+        const items = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : [];
+
+        const existsInCart = items.some(
+          (item) => String(item?.courses?.id) === String(id),
+        );
+
+        if (mounted) setIsInCart(existsInCart);
+      } catch {
+        if (mounted) setIsInCart(false);
+      }
+    };
+
+    checkIfCourseInCart();
+
+    return () => {
+      mounted = false;
+    };
+  }, [id, isAuthenticated]);
 
   // Get content type icon
   const getContentTypeIcon = (contentType) => {
@@ -117,6 +154,7 @@ const CourseDetail = () => {
     try {
       setAddingToCart(true);
       await cartService.addItem(id);
+      setIsInCart(true);
       toast.success("Course added to cart");
     } catch (error) {
       const message =
@@ -248,8 +286,11 @@ const CourseDetail = () => {
                       {course.teacher.image ? (
                         <img
                           src={course.teacher.image}
-                          alt={course.teacher.username}
+                          alt={defaultUserPhoto}
                           className="w-full h-full rounded-full object-cover"
+                          onError={(e) => {
+                            e.target.src = defaultUserPhoto;
+                          }}
                         />
                       ) : (
                         <span className="text-white text-lg font-bold">
@@ -277,15 +318,11 @@ const CourseDetail = () => {
                 {/* Thumbnail */}
                 <div className="relative rounded-xl overflow-hidden mb-4">
                   <img
-                    src={
-                      course.thumbnail_url ||
-                      "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course"
-                    }
-                    alt={course.title}
+                    src={course.thumbnail_url}
+                    alt={defaultCoursePhoto}
                     className="w-full h-48 object-cover"
                     onError={(e) => {
-                      e.target.src =
-                        "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course";
+                      e.target.src = defaultCoursePhoto;
                     }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
@@ -332,13 +369,18 @@ const CourseDetail = () => {
                   <div className="space-y-3">
                     <button
                       onClick={handleAddToCart}
-                      disabled={addingToCart}
+                      disabled={addingToCart || isInCart}
                       className="btn-primary w-full disabled:opacity-50"
                     >
                       {addingToCart ? (
                         <>
                           <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
                           Adding...
+                        </>
+                      ) : isInCart ? (
+                        <>
+                          <CheckCircle2 className="h-5 w-5 mr-2" />
+                          Added to Cart
                         </>
                       ) : (
                         <>

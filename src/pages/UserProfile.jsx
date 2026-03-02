@@ -9,14 +9,16 @@ import {
   Camera,
   BookOpen,
   Award,
-  Clock,
-  TrendingUp,
+  Star,
+  CheckCircle,
   Calendar,
   Briefcase,
   Sparkles,
   Shield,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import defaultCoursePhoto from "../../src/assets/default_course_photo.jpg";
+import defaultUserPhoto from "../../src/assets/default_user_photo.jpg";
 
 const UserProfile = () => {
   const dispatch = useAppDispatch();
@@ -93,33 +95,6 @@ const UserProfile = () => {
     setImagePreview(null);
   };
 
-  const stats = [
-    {
-      icon: <BookOpen className="h-5 w-5" />,
-      label: "Courses Enrolled",
-      value: 0,
-      color: "from-blue-500 to-cyan-500",
-    },
-    {
-      icon: <Award className="h-5 w-5" />,
-      label: "Certificates",
-      value: user?.certificates || 8,
-      color: "from-yellow-500 to-orange-500",
-    },
-    {
-      icon: <Clock className="h-5 w-5" />,
-      label: "Hours Learned",
-      value: user?.hoursLearned || 156,
-      color: "from-purple-500 to-pink-500",
-    },
-    {
-      icon: <TrendingUp className="h-5 w-5" />,
-      label: "Streak Days",
-      value: user?.streakDays || 23,
-      color: "from-green-500 to-emerald-500",
-    },
-  ];
-
   const rawMyCourses = Array.isArray(myCourses)
     ? myCourses
     : Array.isArray(myCourses?.courses)
@@ -139,7 +114,45 @@ const UserProfile = () => {
     })
     .filter((course) => course?.id);
 
-  stats[0].value = normalizedMyCourses.length;
+  const achievements = Array.isArray(user?.achievements)
+    ? user.achievements
+    : [];
+  const visibleAchievements = achievements.filter(
+    (achievement) => achievement?.title || achievement?.name,
+  );
+
+  const joinedDate = user?.createdat
+    ? new Date(user.createdat).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "Not available";
+
+  const completedCoursesCount = normalizedMyCourses.filter((course) =>
+    Boolean(course?.enrollment?.completed ?? course?.completed),
+  ).length;
+
+  const stats = [
+    {
+      icon: <BookOpen className="h-5 w-5" />,
+      label: "Courses Enrolled",
+      value: normalizedMyCourses.length,
+      color: "from-blue-500 to-cyan-500",
+    },
+    {
+      icon: <CheckCircle className="h-5 w-5" />,
+      label: "Completed Courses",
+      value: completedCoursesCount,
+      color: "from-green-500 to-emerald-500",
+    },
+    {
+      icon: <Star className="h-5 w-5" />,
+      label: "Points",
+      value: user?.points ?? 0,
+      color: "from-amber-500 to-yellow-500",
+    },
+  ];
 
   const recentCourses = [...normalizedMyCourses]
     .sort((a, b) => {
@@ -235,8 +248,11 @@ const UserProfile = () => {
                       {imagePreview || user.image ? (
                         <img
                           src={imagePreview || user.image}
-                          alt={user.username || "User"}
+                          alt={defaultUserPhoto}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.src = defaultUserPhoto;
+                          }}
                         />
                       ) : (
                         <span className="text-5xl font-bold text-primary-600 dark:text-primary-400">
@@ -298,12 +314,15 @@ const UserProfile = () => {
                       <Calendar className="h-4 w-4" />
                       <span>
                         Joined{" "}
-                        {new Date(
-                          user.createdat || Date.now(),
-                        ).toLocaleDateString("en-US", {
-                          month: "short",
-                          year: "numeric",
-                        })}
+                        {joinedDate === "Not available"
+                          ? joinedDate
+                          : new Date(user.createdat).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "short",
+                                year: "numeric",
+                              },
+                            )}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -331,11 +350,11 @@ const UserProfile = () => {
       {/* Main Content */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8 max-w-4xl mx-auto">
           {stats.map((stat, index) => (
             <div
               key={index}
-              className="card-hover group"
+              className="card-hover group cursor-default text-center flex flex-col items-center"
               style={{ animationDelay: `${index * 100}ms` }}
             >
               <div
@@ -353,14 +372,22 @@ const UserProfile = () => {
           ))}
         </div>
 
-        {/* Activity Sections */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Recent Courses */}
+        {/* Main Sections */}
+        <div className="grid lg:grid-cols-3 gap-6 items-start">
           <div className="lg:col-span-2 card">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-              <BookOpen className="h-6 w-6 text-primary-600 dark:text-primary-400" />
-              Recent Courses
-            </h2>
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <BookOpen className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+                Recent Courses
+              </h2>
+              <Link
+                to="/my-courses"
+                className="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+              >
+                View All
+              </Link>
+            </div>
+
             {isCoursesLoading ? (
               <div className="py-10 text-center text-gray-600 dark:text-gray-400">
                 Loading enrolled courses...
@@ -382,13 +409,17 @@ const UserProfile = () => {
                     >
                       {course.thumbnail_url ? (
                         <img
-                          src={course.thumbnail_url}
-                          alt={course.title || "Course thumbnail"}
+                          src={course.thumbnail_url || defaultCoursePhoto}
+                          alt={defaultCoursePhoto}
                           className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
+                          onError={(e) => {
+                            e.target.src = defaultCoursePhoto;
+                          }}
                         />
                       ) : (
                         <div className="w-16 h-16 bg-gradient-to-br from-primary-600 to-purple-600 rounded-xl flex-shrink-0"></div>
                       )}
+
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-gray-900 dark:text-white truncate">
                           {course.title || "Untitled Course"}
@@ -399,6 +430,7 @@ const UserProfile = () => {
                             : "Progress data unavailable"}
                         </p>
                       </div>
+
                       <div className="w-16 h-16">
                         <svg
                           className="transform -rotate-90"
@@ -427,52 +459,76 @@ const UserProfile = () => {
               </div>
             )}
           </div>
-          <Link to="/my-courses" className="text-primary-600 hover:underline">
-            View All Courses →
-          </Link>
-          {/* Achievements */}
-          <div className="lg:col-span-1 card">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-              <Award className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-              Achievements
-            </h2>
-            <div className="space-y-4">
-              {[
-                {
-                  title: "First Course",
-                  icon: "🎯",
-                  color: "from-blue-500 to-cyan-500",
-                },
-                {
-                  title: "Week Streak",
-                  icon: "🔥",
-                  color: "from-orange-500 to-red-500",
-                },
-                {
-                  title: "Top Performer",
-                  icon: "⭐",
-                  color: "from-yellow-500 to-orange-500",
-                },
-              ].map((achievement, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-dark-800 rounded-xl"
-                >
-                  <div
-                    className={`w-12 h-12 bg-gradient-to-br ${achievement.color} rounded-xl flex items-center justify-center text-2xl`}
-                  >
-                    {achievement.icon}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white">
-                      {achievement.title}
-                    </h3>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Earned recently
-                    </p>
-                  </div>
+
+          <div className="space-y-6">
+            <div className="card">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <User className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+                Profile Details
+              </h2>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Account Type
+                  </span>
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {user.type === "Teacher" ? "Instructor" : "Student"}
+                  </span>
                 </div>
-              ))}
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Profile Status
+                  </span>
+                  <span
+                    className={`font-semibold ${user.isprofilecomplete ? "text-green-600 dark:text-green-400" : "text-yellow-600 dark:text-yellow-400"}`}
+                  >
+                    {user.isprofilecomplete ? "Complete" : "Incomplete"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-gray-600 dark:text-gray-400">
+                    Joined
+                  </span>
+                  <span className="font-semibold text-gray-900 dark:text-white">
+                    {joinedDate}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+                <Award className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+                Achievements
+              </h2>
+              {visibleAchievements.length === 0 ? (
+                <div className="p-4 bg-gray-50 dark:bg-dark-800 rounded-xl text-sm text-gray-600 dark:text-gray-400">
+                  No achievements data available.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {visibleAchievements.map((achievement, i) => (
+                    <div
+                      key={achievement?.id || i}
+                      className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-dark-800 rounded-xl"
+                    >
+                      <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-xl flex items-center justify-center">
+                        <Award className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900 dark:text-white">
+                          {achievement.title || achievement.name}
+                        </h3>
+                        {achievement?.description ? (
+                          <p className="text-xs text-gray-600 dark:text-gray-400">
+                            {achievement.description}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
