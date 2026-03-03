@@ -68,7 +68,11 @@ const CourseEntryRoute = () => {
     );
   }
 
-  return view === "learning" ? <CourseLearning /> : <CourseDetail />;
+  return view === "learning" ? (
+    <CourseLearning />
+  ) : (
+    <CourseDetail onEnrolled={() => setView("learning")} />
+  );
 };
 
 export default CourseEntryRoute;

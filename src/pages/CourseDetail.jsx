@@ -28,7 +28,7 @@ import { cartService } from "../services/cartService";
 import defaultCoursePhoto from "../../src/assets/default_course_photo.jpg";
 import defaultUserPhoto from "../../src/assets/default_user_photo.jpg";
 
-const CourseDetail = () => {
+const CourseDetail = ({ onEnrolled }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
@@ -136,7 +136,11 @@ const CourseDetail = () => {
       setEnrolling(true);
       await dispatch(enrollInCourse(id)).unwrap();
       toast.success("Successfully enrolled in the course!");
-      dispatch(fetchCourseById(id));
+      if (typeof onEnrolled === "function") {
+        onEnrolled();
+      } else {
+        dispatch(fetchCourseById(id));
+      }
     } catch (error) {
       toast.error(error || "Failed to enroll in course");
     } finally {

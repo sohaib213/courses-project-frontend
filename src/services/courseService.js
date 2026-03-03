@@ -37,7 +37,7 @@ export const courseService = {
   },
 
   enrollInCourse: async (courseId) => {
-    const response = await api.post(`/courses/${courseId}/enroll`);
+    const response = await api.post(`/enrollments/course/${courseId}`);
     return response.data.data;
   },
 

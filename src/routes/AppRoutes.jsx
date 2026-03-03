@@ -20,7 +20,9 @@ import CourseEntryRoute from "./CourseEntryRoute";
 import LessonManagement from "../pages/teacher/LessonManagement";
 import QuizManagement from "../pages/teacher/QuizManagement";
 import EditCourse from "../pages/teacher/EditCourse";
-
+import AdminDashboard from "../pages/admin/AdminDashboard-Secure.jsx";
+import AdminLogin from "../pages/admin/AdminLogin";
+import ProtectedAdminRoute from "../pages/admin/components/ProtectedAdminRoute"; // Routes
 const AppRoutes = () => {
   return (
     <Routes>
@@ -52,7 +54,6 @@ const AppRoutes = () => {
         }
       />
       {/* Protected Routes */}
-
       <Route
         path="/teacher/dashboard"
         element={
@@ -85,7 +86,6 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/profile"
         element={
@@ -94,7 +94,18 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
+      {/* Admin Routes */}
 
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route
+        path="/admin/dashboard"
+        element={
+          <ProtectedAdminRoute>
+            <AdminDashboard />
+          </ProtectedAdminRoute>
+        }
+      />
+      <Route path="/admin/dashboard" element={<AdminDashboard />} />
       {/* 404 Page */}
       <Route path="*" element={<NotFound />} />
     </Routes>
