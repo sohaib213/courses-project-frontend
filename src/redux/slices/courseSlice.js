@@ -1,5 +1,33 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { courseService } from "../../services/courseService";
+import { DEFAULT_PAGE_LIMIT } from "../../constants/pagination";
+
+const normalizeCoursesPayload = (payload) => {
+  const data = payload?.data ?? payload;
+
+  if (Array.isArray(data)) {
+    return {
+      courses: data,
+      count: data.length,
+      pagination: null,
+    };
+  }
+
+  if (data && Array.isArray(data.courses)) {
+    const parsedCount = Number(data.count);
+    return {
+      courses: data.courses,
+      count: Number.isFinite(parsedCount) ? parsedCount : data.courses.length,
+      pagination: data.pagination || null,
+    };
+  }
+
+  return {
+    courses: [],
+    count: 0,
+    pagination: data?.pagination || null,
+  };
+};
 
 // Async Thunks
 export const fetchCourses = createAsyncThunk(
@@ -7,7 +35,6 @@ export const fetchCourses = createAsyncThunk(
   async (params = {}, { rejectWithValue }) => {
     try {
       const data = await courseService.getAllCourses(params);
-      console.log("Fetched courses data:", data);
       return { data, params }; // Return params to track current filters
     } catch (error) {
       return rejectWithValue(
@@ -40,7 +67,10 @@ export const fetchCourseById = createAsyncThunk(
 
 export const searchCourses = createAsyncThunk(
   "courses/searchCourses",
-  async ({ searchTerm, page = 1, limit = 9 }, { rejectWithValue }) => {
+  async (
+    { searchTerm, page = 1, limit = DEFAULT_PAGE_LIMIT },
+    { rejectWithValue },
+  ) => {
     try {
       const data = await courseService.searchCourses(searchTerm, page, limit);
       return data;
@@ -54,7 +84,10 @@ export const searchCourses = createAsyncThunk(
 
 export const fetchCoursesByCategory = createAsyncThunk(
   "courses/fetchCoursesByCategory",
-  async ({ categoryId, page = 1, limit = 9 }, { rejectWithValue }) => {
+  async (
+    { categoryId, page = 1, limit = DEFAULT_PAGE_LIMIT },
+    { rejectWithValue },
+  ) => {
     try {
       const data = await courseService.getCoursesByCategory(
         categoryId,
@@ -72,7 +105,10 @@ export const fetchCoursesByCategory = createAsyncThunk(
 
 export const fetchCoursesByTeacher = createAsyncThunk(
   "courses/fetchCoursesByTeacher",
-  async ({ teacherId, page = 1, limit = 9 }, { rejectWithValue }) => {
+  async (
+    { teacherId, page = 1, limit = DEFAULT_PAGE_LIMIT },
+    { rejectWithValue },
+  ) => {
     try {
       const data = await courseService.getCoursesByTeacher(
         teacherId,
@@ -149,7 +185,6 @@ export const fetchMyCourses = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const data = await courseService.getMyCourses();
-      console.log(data);
       return data;
     } catch (error) {
       return rejectWithValue(
@@ -168,7 +203,8 @@ const initialState = {
   error: null,
   pagination: {
     currentPage: 1,
-    limit: 9,
+    limit: DEFAULT_PAGE_LIMIT,
+    total_count: 0,
   },
   filters: {
     search: "",
@@ -223,15 +259,15 @@ const courseSlice = createSlice({
       })
       .addCase(fetchCourses.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.courses = Array.isArray(action.payload.data)
-          ? action.payload.data
-          : action.payload.data.courses || [];
+        const normalized = normalizeCoursesPayload(action.payload.data);
+        state.courses = normalized.courses;
+        state.pagination.total_count = normalized.count;
 
-        // Update pagination if backend returns it
-        if (action.payload.data.pagination) {
+        if (normalized.pagination) {
           state.pagination = {
             ...state.pagination,
-            ...action.payload.data.pagination,
+            ...normalized.pagination,
+            total_count: normalized.count,
           };
         }
       })
@@ -248,7 +284,9 @@ const courseSlice = createSlice({
       })
       .addCase(searchCourses.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.courses = action.payload;
+        const normalized = normalizeCoursesPayload(action.payload);
+        state.courses = normalized.courses;
+        state.pagination.total_count = normalized.count;
       })
       .addCase(searchCourses.rejected, (state, action) => {
         state.isLoading = false;
@@ -263,7 +301,9 @@ const courseSlice = createSlice({
       })
       .addCase(fetchCoursesByCategory.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.courses = action.payload;
+        const normalized = normalizeCoursesPayload(action.payload);
+        state.courses = normalized.courses;
+        state.pagination.total_count = normalized.count;
       })
       .addCase(fetchCoursesByCategory.rejected, (state, action) => {
         state.isLoading = false;
@@ -278,7 +318,9 @@ const courseSlice = createSlice({
       })
       .addCase(fetchCoursesByTeacher.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.courses = action.payload;
+        const normalized = normalizeCoursesPayload(action.payload);
+        state.courses = normalized.courses;
+        state.pagination.total_count = normalized.count;
       })
       .addCase(fetchCoursesByTeacher.rejected, (state, action) => {
         state.isLoading = false;

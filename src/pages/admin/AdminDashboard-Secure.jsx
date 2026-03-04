@@ -15,6 +15,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import api from "../../services/api";
+import { DEFAULT_PAGE_LIMIT } from "../../constants/pagination";
 import toast from "react-hot-toast";
 import CourseReviewModal from "./components/CourseReviewModal";
 import defaultCoursePhoto from "../../assets/default_course_photo.jpg";
@@ -33,7 +34,7 @@ const AdminDashboard = () => {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [pageSize] = useState(12); // Courses per page
+  const [pageSize] = useState(DEFAULT_PAGE_LIMIT);
 
   // Get API key from sessionStorage (set during login)
   const API_KEY = sessionStorage.getItem("admin_api_key");

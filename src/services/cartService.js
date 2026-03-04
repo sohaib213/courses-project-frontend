@@ -30,5 +30,9 @@ export const cartService = {
     const response = await api.get("/carts/payments");
     return response.data.data || response.data;
   },
-};
 
+  getCartItemsByCartId: async (cartId) => {
+    const response = await api.get(`/carts/${cartId}/items`);
+    return response.data.data || response.data;
+  },
+};

@@ -721,14 +721,27 @@ const CourseLearning = () => {
             </div>
           </div>
 
-          {enrollment?.completed && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-lg">
-              <Award className="h-4 w-4" />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsChatOpen((prev) => !prev)}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+              aria-label={isChatOpen ? "Close chat" : "Open chat"}
+            >
+              <MessageSquare className="h-4 w-4" />
               <span className="text-sm font-medium hidden sm:inline">
-                Completed
+                {isChatOpen ? "Close Chat" : "Chat"}
               </span>
-            </div>
-          )}
+            </button>
+
+            {enrollment?.completed && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-lg">
+                <Award className="h-4 w-4" />
+                <span className="text-sm font-medium hidden sm:inline">
+                  Completed
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1457,19 +1470,6 @@ const CourseLearning = () => {
           </div>
         </div>
       </div>
-
-      <button
-        onClick={() => setIsChatOpen((prev) => !prev)}
-        className={`fixed bottom-6 z-50 inline-flex items-center gap-2 px-4 py-3 rounded-full bg-primary-600 text-white shadow-xl hover:bg-primary-700 transition-all ${
-          isChatOpen ? "right-6 lg:right-[25rem]" : "right-6"
-        }`}
-        aria-label={isChatOpen ? "Close chat" : "Open chat"}
-      >
-        <MessageSquare className="h-4 w-4" />
-        <span className="text-sm font-medium">
-          {isChatOpen ? "Close Chat" : "Open Chat"}
-        </span>
-      </button>
 
       {isChatOpen && (
         <div

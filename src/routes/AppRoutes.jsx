@@ -16,6 +16,7 @@ import UserProfile from "../pages/UserProfile";
 import MyCourses from "../pages/MyCourses";
 import Cart from "../pages/Cart";
 import Payment from "../pages/Payment";
+import PaymentDetails from "../pages/PaymentDetails";
 import CourseEntryRoute from "./CourseEntryRoute";
 import LessonManagement from "../pages/teacher/LessonManagement";
 import QuizManagement from "../pages/teacher/QuizManagement";
@@ -50,6 +51,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Payment />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/payment/:paymentId"
+        element={
+          <ProtectedRoute>
+            <PaymentDetails />
           </ProtectedRoute>
         }
       />

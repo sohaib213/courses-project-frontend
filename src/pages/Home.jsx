@@ -25,6 +25,7 @@ import {
   selectShouldRefetchCategories,
 } from "../redux/slices/categorySlice";
 import { fetchCourses } from "../redux/slices/courseSlice";
+import { DEFAULT_PAGE_LIMIT } from "../constants/pagination";
 
 const Home = () => {
   const dispatch = useAppDispatch();
@@ -54,7 +55,7 @@ const Home = () => {
 
   useEffect(() => {
     if (courses.length === 0) {
-      dispatch(fetchCourses({ page: 1, limit: 12 }));
+      dispatch(fetchCourses({ page: 1, limit: DEFAULT_PAGE_LIMIT }));
     }
   }, [dispatch, courses.length]);
 

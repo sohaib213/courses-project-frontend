@@ -1,9 +1,11 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Clock, Users, Star, BookOpen, TrendingUp, Award } from "lucide-react";
 import defaultCoursePhoto from "../../../src/assets/default_course_photo.jpg";
 import defaultUserPhoto from "../../../src/assets/default_user_photo.jpg";
 
 const CourseCard = ({ course, viewMode = "grid" }) => {
+  const navigate = useNavigate();
+
   // Format difficulty level with colors
   const getDifficultyBadge = (difficulty) => {
     const badges = {
@@ -41,6 +43,12 @@ const CourseCard = ({ course, viewMode = "grid" }) => {
   };
 
   const isFree = !course.price || course.price === "0" || course.price === 0;
+  const handleInstructorClick = (event) => {
+    if (!course?.teacher?.id) return;
+    event.preventDefault();
+    event.stopPropagation();
+    navigate(`/instructor/${course.teacher.id}`);
+  };
 
   // Grid View (Default)
   if (viewMode === "grid") {
@@ -53,7 +61,6 @@ const CourseCard = ({ course, viewMode = "grid" }) => {
         <div className="relative overflow-hidden rounded-xl mb-4 aspect-video">
           <img
             src={course.thumbnail_url || defaultCoursePhoto}
-            alt={defaultCoursePhoto}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
             onError={(e) => {
               e.target.src = defaultCoursePhoto;
@@ -131,12 +138,15 @@ const CourseCard = ({ course, viewMode = "grid" }) => {
 
           {/* Instructor */}
           {course.teacher && (
-            <div className="flex items-center gap-2 mt-auto">
+            <button
+              type="button"
+              onClick={handleInstructorClick}
+              className="flex items-center gap-2 mt-auto text-left hover:opacity-90 transition-opacity"
+            >
               <div className="w-8 h-8 rounded-full overflow-hidden">
                 {course.teacher.image ? (
                   <img
                     src={course.teacher.image}
-                    alt={defaultUserPhoto}
                     className="w-full h-full object-cover"
                     onError={(e) => {
                       e.target.src = defaultUserPhoto;
@@ -155,7 +165,7 @@ const CourseCard = ({ course, viewMode = "grid" }) => {
                   course.teacher.email ||
                   "Instructor"}
               </span>
-            </div>
+            </button>
           )}
         </div>
       </Link>
@@ -172,7 +182,6 @@ const CourseCard = ({ course, viewMode = "grid" }) => {
       <div className="relative w-full md:w-64 h-48 md:h-auto flex-shrink-0 overflow-hidden rounded-xl">
         <img
           src={course.thumbnail_url || defaultCoursePhoto}
-          alt={defaultCoursePhoto}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
           onError={(e) => {
             e.target.src = defaultCoursePhoto;
@@ -275,9 +284,13 @@ const CourseCard = ({ course, viewMode = "grid" }) => {
               </div>
 
               <div>
-                <div className="text-sm font-medium text-gray-900 dark:text-white">
+                <button
+                  type="button"
+                  onClick={handleInstructorClick}
+                  className="text-sm font-medium text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                >
                   {course.teacher.username || "Instructor"}
-                </div>
+                </button>
                 <div className="text-xs text-gray-500 dark:text-gray-500">
                   {course.teacher.email}
                 </div>

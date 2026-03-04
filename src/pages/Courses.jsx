@@ -48,6 +48,10 @@ const Courses = () => {
 
   const [values, setValues] = useState([0, 1000]);
   const isPriceFilterActive = values[0] !== MIN || values[1] !== MAX;
+  const activeCategoryId = categoryIdFromQuery || filters.category_id;
+  const totalCoursesCount = pagination.total_count || courses.length;
+  const canGoNextPage =
+    pagination.currentPage * pagination.limit < totalCoursesCount;
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -99,7 +103,7 @@ const Courses = () => {
       page: pagination.currentPage,
       limit: pagination.limit,
       ...(filters.search && { title_description_search: filters.search }),
-      ...(filters.category_id && { category_id: filters.category_id }),
+      ...(activeCategoryId && { category_id: activeCategoryId }),
       ...(filters.teacher_id && { teacher_id: filters.teacher_id }),
       ...(filters.min_price !== undefined && { min_price: filters.min_price }),
       ...(filters.max_price !== undefined && { max_price: filters.max_price }),
@@ -111,7 +115,7 @@ const Courses = () => {
     pagination.currentPage,
     pagination.limit,
     filters.search,
-    filters.category_id,
+    activeCategoryId,
     filters.teacher_id,
     filters.min_price,
     filters.max_price,
@@ -129,7 +133,7 @@ const Courses = () => {
   const handleCategoryFilter = (categoryId) => {
     const params = new URLSearchParams(searchParams);
 
-    if (String(filters.category_id) === String(categoryId)) {
+    if (String(activeCategoryId) === String(categoryId)) {
       params.delete("category_id");
     } else {
       params.set("category_id", categoryId);
@@ -174,7 +178,7 @@ const Courses = () => {
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 dark:bg-white/10 backdrop-blur-sm rounded-full mb-4">
               <Sparkles className="h-4 w-4" />
               <span className="text-sm font-medium">
-                {courses.length}+ Courses Available
+                {totalCoursesCount}+ Courses Available
               </span>
             </div>
 
@@ -215,7 +219,7 @@ const Courses = () => {
                   Filters
                 </button>
 
-                {(filters.search || filters.category_id || isPriceFilterActive) && (
+                {(filters.search || activeCategoryId || isPriceFilterActive) && (
                   <button
                     type="button"
                     onClick={handleResetFilters}
@@ -229,7 +233,7 @@ const Courses = () => {
             </div>
 
             {/* Active Filters */}
-            {(filters.search || filters.category_id) && (
+            {(filters.search || activeCategoryId) && (
               <div className="flex flex-wrap gap-2 pt-2">
                 {filters.search && (
                   <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300 border border-primary-200 dark:border-primary-800">
@@ -242,12 +246,11 @@ const Courses = () => {
                     </button>
                   </span>
                 )}
-                {filters.category_id && (
+                {activeCategoryId && (
                   <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                     <Filter className="h-3 w-3 mr-1.5" />
                     {categories.find(
-                      (c) =>
-                        String(c.id || c._id) === String(filters.category_id),
+                      (c) => String(c.id || c._id) === String(activeCategoryId),
                     )?.name || "Category"}
                     <button
                       onClick={handleClearCategoryFilter}
@@ -289,7 +292,7 @@ const Courses = () => {
                             handleCategoryFilter(category.id || category._id)
                           }
                           className={`group relative overflow-hidden px-4 py-3 rounded-xl border-2 transition-all ${
-                            String(filters.category_id) ===
+                            String(activeCategoryId) ===
                             String(category.id || category._id)
                               ? "border-primary-500 bg-gradient-to-br " +
                                 category.color +
@@ -355,6 +358,10 @@ const Courses = () => {
                 Showing{" "}
                 <span className="font-bold text-gray-900 dark:text-white">
                   {courses.length}
+                </span>{" "}
+                of{" "}
+                <span className="font-bold text-gray-900 dark:text-white">
+                  {totalCoursesCount}
                 </span>{" "}
                 courses
               </>
@@ -449,7 +456,7 @@ const Courses = () => {
 
             <button
               onClick={() => handlePageChange(pagination.currentPage + 1)}
-              disabled={courses.length < pagination.limit}
+              disabled={!canGoNextPage}
               className="px-6 py-3 rounded-xl border-2 border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:border-primary-500 transition-all font-medium"
             >
               Next

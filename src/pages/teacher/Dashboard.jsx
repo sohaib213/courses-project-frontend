@@ -18,25 +18,38 @@ import {
 import api from "../../services/api";
 import toast from "react-hot-toast";
 import CreateCourseModal from "./components/CreateCourseModal";
+import { DEFAULT_PAGE_LIMIT } from "../../constants/pagination";
 
 const TeacherDashboard = () => {
   const [courses, setCourses] = useState([]);
+  const [totalCoursesCount, setTotalCoursesCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all"); // all, approved, pending
   const [deletingCourseId, setDeletingCourseId] = useState(null);
-
-  useEffect(() => {
-    fetchCourses();
-  }, []);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const fetchCourses = async () => {
     try {
       setIsLoading(true);
-      const response = await api.get("/courses/teacher");
+      const response = await api.get("/courses/teacher", {
+        params: {
+          page: currentPage,
+          limit: DEFAULT_PAGE_LIMIT,
+        },
+      });
       const data = response.data.data || response.data;
-      setCourses(Array.isArray(data) ? data : []);
+      const items = Array.isArray(data) ? data : data?.courses || [];
+      const parsedCount = Number(data?.count);
+      setCourses(Array.isArray(items) ? items : []);
+      setTotalCoursesCount(
+        Number.isFinite(parsedCount)
+          ? parsedCount
+          : Array.isArray(items)
+            ? items.length
+            : 0,
+      );
     } catch (error) {
       console.error("Failed to fetch courses:", error);
       toast.error("Failed to load courses");
@@ -44,6 +57,10 @@ const TeacherDashboard = () => {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchCourses();
+  }, [currentPage]);
 
   const handleDeleteCourse = async (courseId) => {
     if (
@@ -78,9 +95,21 @@ const TeacherDashboard = () => {
 
     return matchesSearch && matchesFilter;
   });
+  const totalFilteredCourses = filteredCourses.length;
+  const canGoNextPage =
+    currentPage * DEFAULT_PAGE_LIMIT < totalCoursesCount;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus]);
+
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const stats = {
-    total: courses.length,
+    total: totalCoursesCount,
     approved: courses.filter((c) => c.status === "Approved").length,
     pending: courses.filter((c) => c.status === "Pending").length,
     students: courses.reduce((sum, c) => sum + (c._count?.enrollments || 0), 0),
@@ -230,7 +259,7 @@ const TeacherDashboard = () => {
         </div>
 
         {/* Courses Grid */}
-        {filteredCourses.length === 0 ? (
+        {totalFilteredCourses === 0 ? (
           <div className="card text-center py-16">
             <div className="w-24 h-24 bg-gradient-to-br from-primary-100 to-purple-100 dark:from-primary-900/30 dark:to-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
               <BookOpen className="h-12 w-12 text-primary-600 dark:text-primary-400" />
@@ -256,96 +285,120 @@ const TeacherDashboard = () => {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCourses.map((course) => (
-              <div key={course.id} className="card-hover group">
-                {/* Thumbnail */}
-                <div className="relative overflow-hidden rounded-xl mb-4 aspect-video">
-                  <img
-                    src={
-                      course.thumbnail_url ||
-                      "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course"
-                    }
-                    alt={course.title}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    onError={(e) => {
-                      e.target.src =
-                        "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course";
-                    }}
-                  />
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredCourses.map((course) => (
+                <div key={course.id} className="card-hover group">
+                  {/* Thumbnail */}
+                  <div className="relative overflow-hidden rounded-xl mb-4 aspect-video">
+                    <img
+                      src={
+                        course.thumbnail_url ||
+                        "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course"
+                      }
+                      alt={course.title}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      onError={(e) => {
+                        e.target.src =
+                          "https://via.placeholder.com/400x250/3b82f6/ffffff?text=Course";
+                      }}
+                    />
 
-                  {/* Status Badge */}
-                  <div className="absolute top-3 right-3">
-                    {getStatusBadge(course.status)}
-                  </div>
-
-                  {/* Ready Badge */}
-                  {!course.isReady && (
-                    <div className="absolute top-3 left-3 px-2 py-1 bg-red-500 text-white text-xs font-semibold rounded-full">
-                      Draft
+                    {/* Status Badge */}
+                    <div className="absolute top-3 right-3">
+                      {getStatusBadge(course.status)}
                     </div>
-                  )}
-                </div>
 
-                {/* Course Info */}
-                <div className="mb-4">
-                  <h3 className="text-xl font-bold mb-2 line-clamp-2 text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                    {course.title}
-                  </h3>
-
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
-                    {course.description || "No description"}
-                  </p>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-4 text-gray-500 dark:text-gray-500">
-                      <div className="flex items-center gap-1">
-                        <PlayCircle className="h-4 w-4" />
-                        <span>{course.lessons_number || 0} lessons</span>
+                    {/* Ready Badge */}
+                    {!course.isReady && (
+                      <div className="absolute top-3 left-3 px-2 py-1 bg-red-500 text-white text-xs font-semibold rounded-full">
+                        Draft
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4" />
-                        <span>{course._count?.enrollments || 0}</span>
-                      </div>
-                    </div>
-                    <div className="text-lg font-bold text-primary-600 dark:text-primary-400">
-                      ${course.price}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2">
-                  <Link
-                    to={`/teacher/courses/${course.id}/lessons`}
-                    className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-all text-center flex items-center justify-center gap-2"
-                  >
-                    <Eye className="h-4 w-4" />
-                    <span>Manage</span>
-                  </Link>
-                  <Link
-                    to={`/teacher/courses/${course.id}/edit`}
-                    className="px-4 py-2 bg-gray-100 dark:bg-dark-800 hover:bg-gray-200 dark:hover:bg-dark-700 text-gray-700 dark:text-gray-300 rounded-xl transition-all"
-                    title="Edit course"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Link>
-                  <button
-                    onClick={() => handleDeleteCourse(course.id)}
-                    disabled={deletingCourseId === course.id}
-                    className="px-4 py-2 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-xl transition-all disabled:opacity-50"
-                    title="Delete course"
-                  >
-                    {deletingCourseId === course.id ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-600 border-t-transparent"></div>
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
                     )}
-                  </button>
+                  </div>
+
+                  {/* Course Info */}
+                  <div className="mb-4">
+                    <h3 className="text-xl font-bold mb-2 line-clamp-2 text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                      {course.title}
+                    </h3>
+
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
+                      {course.description || "No description"}
+                    </p>
+
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-4 text-gray-500 dark:text-gray-500">
+                        <div className="flex items-center gap-1">
+                          <PlayCircle className="h-4 w-4" />
+                          <span>{course.lessons_number || 0} lessons</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Users className="h-4 w-4" />
+                          <span>{course._count?.enrollments || 0}</span>
+                        </div>
+                      </div>
+                      <div className="text-lg font-bold text-primary-600 dark:text-primary-400">
+                        ${course.price}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    <Link
+                      to={`/teacher/courses/${course.id}/lessons`}
+                      className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-all text-center flex items-center justify-center gap-2"
+                    >
+                      <Eye className="h-4 w-4" />
+                      <span>Manage</span>
+                    </Link>
+                    <Link
+                      to={`/teacher/courses/${course.id}/edit`}
+                      className="px-4 py-2 bg-gray-100 dark:bg-dark-800 hover:bg-gray-200 dark:hover:bg-dark-700 text-gray-700 dark:text-gray-300 rounded-xl transition-all"
+                      title="Edit course"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Link>
+                    <button
+                      onClick={() => handleDeleteCourse(course.id)}
+                      disabled={deletingCourseId === course.id}
+                      className="px-4 py-2 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-xl transition-all disabled:opacity-50"
+                      title="Delete course"
+                    >
+                      {deletingCourseId === course.id ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-600 border-t-transparent"></div>
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+
+            <div className="mt-12 flex justify-center items-center gap-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-6 py-3 rounded-xl border-2 border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:border-primary-500 transition-all font-medium"
+              >
+                Previous
+              </button>
+
+              <span className="px-4 py-2 text-gray-700 dark:text-gray-300 font-medium">
+                Page {currentPage}
+              </span>
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={!canGoNextPage}
+                className="px-6 py-3 rounded-xl border-2 border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed hover:border-primary-500 transition-all font-medium"
+              >
+                Next
+              </button>
+            </div>
+          </>
         )}
       </div>
 

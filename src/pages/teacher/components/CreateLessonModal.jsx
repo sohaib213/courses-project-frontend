@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { X, Upload, FileVideo, Image as ImageIcon } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, FileVideo, Image as ImageIcon } from "lucide-react";
 import api from "../../../services/api";
 import toast from "react-hot-toast";
 
@@ -10,6 +10,18 @@ const CreateLessonModal = ({
   courseId,
   editingLesson,
 }) => {
+  const videoInputRef = useRef(null);
+  const thumbnailInputRef = useRef(null);
+
+  const normalizeContentType = (value) => {
+    const normalized = String(value || "").toLowerCase();
+    if (normalized === "video") return "Video";
+    if (normalized === "quiz") return "Quiz";
+    if (normalized === "text") return "Text";
+    if (normalized === "code") return "Code";
+    return "Video";
+  };
+
   const [formData, setFormData] = useState({
     title: "",
     content: "Video", // Video, Text, Code, Quiz
@@ -25,7 +37,7 @@ const CreateLessonModal = ({
     if (editingLesson) {
       setFormData({
         title: editingLesson.title || "",
-        content: editingLesson.content_type || "Video",
+        content: normalizeContentType(editingLesson.content_type),
       });
       if (editingLesson.video_url) {
         setVideoPreview(editingLesson.video_url);
@@ -99,8 +111,10 @@ const CreateLessonModal = ({
 
       const submitData = new FormData();
       submitData.append("title", formData.title.trim());
-      submitData.append("courseId", courseId);
-      submitData.append("content", formData.content);
+      if (!editingLesson) {
+        submitData.append("courseId", courseId);
+        submitData.append("content", formData.content);
+      }
 
       if (videoFile) {
         submitData.append("video", videoFile);
@@ -239,16 +253,22 @@ const CreateLessonModal = ({
                       controls
                       className="w-full h-64 rounded-xl"
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVideoFile(null);
-                        setVideoPreview(null);
-                      }}
-                      className="absolute top-2 right-2 p-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                    <div className="absolute top-2 right-2">
+                      <button
+                        type="button"
+                        onClick={() => videoInputRef.current?.click()}
+                        className="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        Replace
+                      </button>
+                    </div>
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoChange}
+                      className="hidden"
+                    />
                   </div>
                 ) : (
                   <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 dark:border-dark-700 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-800 transition-colors">
@@ -284,16 +304,22 @@ const CreateLessonModal = ({
                       alt="Thumbnail preview"
                       className="w-full h-48 object-cover rounded-xl"
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setThumbnailFile(null);
-                        setThumbnailPreview(null);
-                      }}
-                      className="absolute top-2 right-2 p-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                    <div className="absolute top-2 right-2">
+                      <button
+                        type="button"
+                        onClick={() => thumbnailInputRef.current?.click()}
+                        className="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        Replace
+                      </button>
+                    </div>
+                    <input
+                      ref={thumbnailInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleThumbnailChange}
+                      className="hidden"
+                    />
                   </div>
                 ) : (
                   <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 dark:border-dark-700 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-800 transition-colors">

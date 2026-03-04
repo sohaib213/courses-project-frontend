@@ -10,8 +10,8 @@ import {
   X,
   Moon,
   Sun,
-  Settings,
   ShoppingCart,
+  CreditCard,
 } from "lucide-react";
 import { useState } from "react";
 import defaultUserPhoto from "../../../src/assets/default_user_photo.jpg";
@@ -90,6 +90,13 @@ const Navbar = () => {
                   <ShoppingCart className="h-4 w-4" />
                   Cart
                 </Link>
+                <Link
+                  to="/payment"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium rounded-lg hover:bg-gray-100 dark:hover:bg-dark-800 transition-all inline-flex items-center gap-2"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  Payments
+                </Link>
 
                 {/* User Menu */}
                 <div className="relative">
@@ -135,14 +142,6 @@ const Navbar = () => {
                         >
                           <User className="h-4 w-4" />
                           <span>Profile</span>
-                        </Link>
-                        <Link
-                          to="/settings"
-                          className="flex items-center gap-3 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-800 transition-colors"
-                          onClick={() => setShowUserMenu(false)}
-                        >
-                          <Settings className="h-4 w-4" />
-                          <span>Settings</span>
                         </Link>
                         <div className="border-t border-gray-200 dark:border-dark-700 my-2"></div>
                         <button
@@ -256,6 +255,14 @@ const Navbar = () => {
                   >
                     <ShoppingCart className="h-4 w-4" />
                     <span>Cart</span>
+                  </Link>
+                  <Link
+                    to="/payment"
+                    className="px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-800 rounded-lg font-medium transition-all flex items-center gap-2"
+                    onClick={closeMobileMenu}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    <span>Payments</span>
                   </Link>
                   <button
                     onClick={handleLogout}
