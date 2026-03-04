@@ -10,7 +10,6 @@ import {
   Zap,
   Target,
   CheckCircle2,
-  Play,
   Sparkles,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -260,13 +259,6 @@ const Home = () => {
                 >
                   Explore Courses
                   <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                </Link>
-                <Link
-                  to="/register"
-                  className="px-8 py-4 bg-transparent border-2 border-white text-white rounded-xl font-bold text-lg hover:bg-white hover:text-primary-600 transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2"
-                >
-                  <Play className="h-5 w-5" />
-                  Watch Demo
                 </Link>
               </div>
 
