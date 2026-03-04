@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../redux/hooks";
 import {
@@ -41,6 +41,8 @@ const Courses = () => {
   const [localSearch, setLocalSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState("grid");
+  const resultsTopRef = useRef(null);
+  const shouldScrollToResultsRef = useRef(false);
 
   const STEP = 10;
   const MIN = 0;
@@ -150,8 +152,17 @@ const Courses = () => {
 
   const handlePageChange = (newPage) => {
     dispatch(setPage(newPage));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    shouldScrollToResultsRef.current = true;
   };
+
+  useEffect(() => {
+    if (!shouldScrollToResultsRef.current || isLoading) return;
+    resultsTopRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    shouldScrollToResultsRef.current = false;
+  }, [isLoading, pagination.currentPage]);
 
   if (isLoading && courses.length === 0) {
     return (
@@ -194,6 +205,7 @@ const Courses = () => {
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Search and Filter Bar */}
+        <div ref={resultsTopRef} style={{ scrollMarginTop: "90px" }} />
         <div className="mb-8 glass rounded-2xl shadow-xl p-6 -mt-8 relative z-10">
           <div className="space-y-4">
             {/* Main Search Row */}

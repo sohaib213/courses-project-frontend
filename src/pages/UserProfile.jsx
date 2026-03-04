@@ -200,7 +200,7 @@ const UserProfile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-dark-950">
+    <div className="min-h-screen w-full overflow-x-hidden bg-gray-50 dark:bg-dark-950">
       {/* Hero Section with Cover & Avatar */}
       <div className="relative">
         {/* Cover Image */}
@@ -306,9 +306,9 @@ const UserProfile = () => {
                   </div>
 
                   <div className="flex flex-wrap gap-4 text-gray-600 dark:text-gray-400 justify-center sm:justify-start mb-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <Mail className="h-4 w-4" />
-                      <span>{user.email}</span>
+                      <span className="break-all">{user.email}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
@@ -405,7 +405,7 @@ const UserProfile = () => {
                     <Link
                       key={course.id}
                       to={`/courses/${course.id}`}
-                      className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-dark-800 rounded-xl hover:bg-gray-100 dark:hover:bg-dark-700 transition-colors"
+                      className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-gray-50 dark:bg-dark-800 rounded-xl hover:bg-gray-100 dark:hover:bg-dark-700 transition-colors min-w-0"
                     >
                       {course.thumbnail_url ? (
                         <img
@@ -431,7 +431,7 @@ const UserProfile = () => {
                         </p>
                       </div>
 
-                      <div className="w-16 h-16">
+                      <div className="w-16 h-16 self-end sm:self-auto">
                         <svg
                           className="transform -rotate-90"
                           viewBox="0 0 36 36"

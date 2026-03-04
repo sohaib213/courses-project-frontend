@@ -6,6 +6,8 @@ import CourseLearning from "../pages/CourseLearning";
 const getApiBaseUrl = () => {
   return import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 };
+const unwrapResponse = (payload) => payload?.data || payload;
+const getUserId = (user) => user?.id || user?._id || user?.user_id || null;
 
 const CourseEntryRoute = () => {
   const { id } = useParams();
@@ -29,25 +31,57 @@ const CourseEntryRoute = () => {
             "Content-Type": "application/json",
           },
         });
+        let isEnrolled = false;
+        if (response.ok) {
+          const body = await response.json();
+          const enrollments = unwrapResponse(body) || [];
+          isEnrolled = Array.isArray(enrollments)
+            ? enrollments.some(
+                (enrollment) =>
+                  String(enrollment?.course_id) === String(id) ||
+                  String(enrollment?.courses?.id) === String(id),
+              )
+            : false;
+        }
 
-        if (!response.ok) {
+        if (isEnrolled) {
+          if (isMounted) setView("learning");
+          return;
+        }
+
+        const [courseResponse, userResponse] = await Promise.all([
+          fetch(`${apiBaseUrl}/courses/${id}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }),
+          fetch(`${apiBaseUrl}/users/me`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }),
+        ]);
+
+        if (!courseResponse.ok || !userResponse.ok) {
           if (isMounted) setView("detail");
           return;
         }
 
-        const body = await response.json();
-        const enrollments = body?.data || body || [];
-        const isEnrolled = Array.isArray(enrollments)
-          ? enrollments.some(
-              (enrollment) =>
-                String(enrollment?.course_id) === String(id) ||
-                String(enrollment?.courses?.id) === String(id),
-            )
-          : false;
+        const courseBody = await courseResponse.json();
+        const userBody = await userResponse.json();
+        const course = unwrapResponse(courseBody) || {};
+        const user = unwrapResponse(userBody) || {};
+        const courseTeacher = course?.teacher || course?.instructor || {};
+        const courseTeacherId = getUserId(courseTeacher);
+        const currentUserId = getUserId(user);
+        const isCourseTeacher =
+          Boolean(courseTeacherId) &&
+          Boolean(currentUserId) &&
+          String(courseTeacherId) === String(currentUserId);
 
-        if (isMounted) {
-          setView(isEnrolled ? "learning" : "detail");
-        }
+        if (isMounted) setView(isCourseTeacher ? "learning" : "detail");
       } catch {
         if (isMounted) setView("detail");
       }

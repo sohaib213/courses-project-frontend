@@ -17,17 +17,24 @@ import {
   X,
   MessageSquare,
   Send,
+  Trash2,
+  AlertCircle,
+  Pencil,
 } from "lucide-react";
 import { io } from "socket.io-client";
 import api from "../services/api";
 import toast from "react-hot-toast";
 import defaultCoursePhoto from "../../src/assets/default_course_photo.jpg";
+import defaultUserPhoto from "../../src/assets/default_user_photo.jpg";
 
 const CHAT_EVENTS = {
   JOIN_COURSE: "join-course",
   LEAVE_COURSE: "leave-course",
   COURSE_MESSAGE: "course-message",
   NEW_MESSAGE: "new-message",
+  UPDATE_MESSAGE: "update-message",
+  MESSAGE_UPDATED: "message-updated",
+  MESSAGE_DELETED: "message-deleted",
   ERROR: "chat-error",
   JOINED_COURSE: "joined-course",
 };
@@ -66,6 +73,7 @@ const getQuizDraftStorageKey = (courseId, lessonId) =>
 const CourseLearning = () => {
   const dispatch = useAppDispatch();
   const authUser = useSelector((state) => state.auth?.user);
+  const currentUserId = authUser?.id || "";
   const currentUsername = String(
     authUser?.username || authUser?.name || authUser?.email || "",
   ).trim();
@@ -91,9 +99,21 @@ const CourseLearning = () => {
   const [chatConnectionError, setChatConnectionError] = useState("");
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingMessageContent, setEditingMessageContent] = useState("");
+  const [updatingMessageId, setUpdatingMessageId] = useState(null);
+  const [deletingMessageId, setDeletingMessageId] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const socketRef = useRef(null);
   const chatMessagesContainerRef = useRef(null);
+  const chatInputRef = useRef(null);
   const socketBaseUrl = useMemo(() => getSocketBaseUrl(), []);
+  const teacher = course?.teacher || course?.instructor || null;
+  const teacherId = teacher?.id || teacher?._id || null;
+  const isCourseTeacher =
+    Boolean(teacherId) &&
+    Boolean(currentUserId) &&
+    String(teacherId) === String(currentUserId);
 
   const getCompletedLessonsCount = (enrollmentData = enrollment) =>
     Number(enrollmentData?.current_lesson_order || 0);
@@ -306,30 +326,44 @@ const CourseLearning = () => {
       try {
         setIsLoading(true);
 
-        // Fetch course details
         const courseResponse = await api.get(`/courses/${courseId}`);
         const courseData = courseResponse.data.data || courseResponse.data;
         setCourse(courseData);
+        console.log("teacher = ", courseData.teacher);
+        const courseTeacher = courseData?.teacher;
+        const courseTeacherId = courseTeacher?.id;
+        const canAccessAsTeacher =
+          Boolean(courseTeacherId) &&
+          Boolean(currentUserId) &&
+          String(courseTeacherId) === String(currentUserId);
 
-        // Fetch user's enrollment
-        const enrollmentResponse = await api.get(`/enrollments`);
-        const enrollments =
-          enrollmentResponse.data.data || enrollmentResponse.data;
-        const userEnrollment = enrollments.find(
+        console.log("can access = ", canAccessAsTeacher);
+        let enrollments = [];
+        try {
+          const enrollmentResponse = await api.get(`/enrollments`);
+          enrollments =
+            enrollmentResponse.data.data || enrollmentResponse.data || [];
+        } catch (error) {
+          if (!canAccessAsTeacher) {
+            throw error;
+          }
+        }
+        const userEnrollment = (
+          Array.isArray(enrollments) ? enrollments : []
+        ).find(
           (e) =>
             String(e.course_id) === String(courseId) ||
             String(e.courses?.id) === String(courseId),
         );
 
-        if (!userEnrollment) {
+        if (!userEnrollment && !canAccessAsTeacher) {
           toast.error("You are not enrolled in this course");
           navigate(`/courses/${courseId}`);
           return;
         }
 
-        setEnrollment(userEnrollment);
+        setEnrollment(userEnrollment || null);
 
-        // Fetch lessons
         const lessonsResponse = await api.get(`/lessons/course/${courseId}`);
         const lessonsData = lessonsResponse.data.data || lessonsResponse.data;
         const lessonsArray = Array.isArray(lessonsData)
@@ -337,7 +371,6 @@ const CourseLearning = () => {
           : lessonsData?.lessons || [];
         setLessons(lessonsArray);
 
-        // Set current lesson based on progress
         const completedLessons = Number(
           userEnrollment?.current_lesson_order || 0,
         );
@@ -379,7 +412,7 @@ const CourseLearning = () => {
         setIsLoading(false);
       }
     },
-    [courseId, navigate],
+    [courseId, navigate, currentUserId],
   );
 
   useEffect(() => {
@@ -387,7 +420,7 @@ const CourseLearning = () => {
   }, [fetchCourseData]);
 
   useEffect(() => {
-    if (!enrollment?.id || !courseId) return;
+    if (!courseId || (!enrollment?.id && !isCourseTeacher)) return;
 
     const token = localStorage.getItem("token");
     if (!token) {
@@ -428,14 +461,16 @@ const CourseLearning = () => {
         ? payload.previousMessages
         : [];
 
-      const mappedMessages = previousMessages.map((message, index) => {
+      const mappedMessages = previousMessages.map((message) => {
         const username = String(message?.username || "Student");
+        const senderId = message?.sender_id || "";
         return {
-          id: `history-${index}-${username}-${message?.time || ""}`,
+          id: message?.id || `history-${Date.now()}-${Math.random()}`,
           content: String(message?.content || ""),
+          senderId,
           username,
           time: formatChatTime(message?.time),
-          isOwn: username === currentUsername,
+          isOwn: senderId === currentUserId,
         };
       });
 
@@ -447,18 +482,58 @@ const CourseLearning = () => {
       const username = String(
         payload?.username || message?.username || "Student",
       );
+      const senderId = message?.sender_id || "";
       const normalizedMessage = {
         id:
           message?.id ||
           `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         content: String(message?.content || ""),
+        senderId,
         username,
         time: formatChatTime(message?.createdat || message?.createdAt),
-        isOwn: username === currentUsername,
+        isOwn: senderId === currentUserId,
       };
 
       if (!normalizedMessage.content.trim()) return;
       setChatMessages((prev) => [...prev, normalizedMessage]);
+    };
+
+    const handleMessageDeleted = (payload) => {
+      const { messageId } = payload;
+      setChatMessages((prev) =>
+        prev.filter((msg) => String(msg.id) !== String(messageId)),
+      );
+      setEditingMessageId((prev) =>
+        String(prev) === String(messageId) ? null : prev,
+      );
+      setUpdatingMessageId((prev) =>
+        String(prev) === String(messageId) ? null : prev,
+      );
+    };
+
+    const handleMessageUpdated = (payload) => {
+      const messageId = payload?.messageId;
+      const content = String(payload?.content || "");
+      if (!messageId || !content.trim()) return;
+
+      setChatMessages((prev) =>
+        prev.map((msg) =>
+          String(msg.id) === String(messageId)
+            ? {
+                ...msg,
+                content,
+                isEdited: true,
+              }
+            : msg,
+        ),
+      );
+      setEditingMessageId((prev) =>
+        String(prev) === String(messageId) ? null : prev,
+      );
+      setUpdatingMessageId((prev) =>
+        String(prev) === String(messageId) ? null : prev,
+      );
+      setEditingMessageContent("");
     };
 
     const handleChatError = (message) => {
@@ -466,12 +541,15 @@ const CourseLearning = () => {
         typeof message === "string" ? message : "Chat connection failed";
       setChatConnectionError(errorMessage);
       setIsChatConnecting(false);
+      setUpdatingMessageId(null);
     };
 
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on(CHAT_EVENTS.JOINED_COURSE, handleJoinedCourse);
     socket.on(CHAT_EVENTS.NEW_MESSAGE, handleNewMessage);
+    socket.on(CHAT_EVENTS.MESSAGE_UPDATED, handleMessageUpdated);
+    socket.on(CHAT_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
     socket.on(CHAT_EVENTS.ERROR, handleChatError);
 
     return () => {
@@ -480,13 +558,15 @@ const CourseLearning = () => {
       socket.off("disconnect", handleDisconnect);
       socket.off(CHAT_EVENTS.JOINED_COURSE, handleJoinedCourse);
       socket.off(CHAT_EVENTS.NEW_MESSAGE, handleNewMessage);
+      socket.off(CHAT_EVENTS.MESSAGE_UPDATED, handleMessageUpdated);
+      socket.off(CHAT_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
       socket.off(CHAT_EVENTS.ERROR, handleChatError);
       socket.disconnect();
       socketRef.current = null;
       setIsChatConnected(false);
       setIsChatConnecting(false);
     };
-  }, [courseId, currentUsername, enrollment?.id, socketBaseUrl]);
+  }, [courseId, currentUserId, enrollment?.id, isCourseTeacher, socketBaseUrl]);
 
   useEffect(() => {
     if (!isChatOpen) return;
@@ -505,11 +585,9 @@ const CourseLearning = () => {
       toast.success("Lesson completed! 🎉");
 
       if (returnToOverview) {
-        // Return to startup view, then refresh progress data.
         setCurrentLesson(null);
       }
       await fetchCourseData({ selectCurrentLesson: false });
-      // Refresh auth user so profile stats (e.g. points) reflect backend updates.
       dispatch(checkAuth());
     } catch (error) {
       toast.error("Failed to mark lesson as complete");
@@ -623,6 +701,39 @@ const CourseLearning = () => {
     }
   };
 
+  const handleDeleteMessage = async (messageId) => {
+    try {
+      setDeletingMessageId(messageId);
+      const socket = socketRef.current;
+      if (socket && isChatConnected) {
+        socket.emit(CHAT_EVENTS.MESSAGE_DELETED, {
+          courseId: String(courseId),
+          messageId,
+        });
+      } else {
+        // Fallback for disconnected chat sessions.
+        await api.delete(`/messages/${messageId}`);
+        setChatMessages((prev) =>
+          prev.filter((msg) => String(msg.id) !== String(messageId)),
+        );
+        setEditingMessageId((prev) =>
+          String(prev) === String(messageId) ? null : prev,
+        );
+        setUpdatingMessageId((prev) =>
+          String(prev) === String(messageId) ? null : prev,
+        );
+      }
+
+      toast.success("Message deleted");
+      setShowDeleteConfirm(null);
+    } catch (error) {
+      console.error("Failed to delete message:", error);
+      toast.error("Failed to delete message");
+    } finally {
+      setDeletingMessageId(null);
+    }
+  };
+
   const getLessonIcon = (contentType) => {
     const icons = {
       video: <PlayCircle className="h-4 w-4" />,
@@ -667,6 +778,45 @@ const CourseLearning = () => {
       content,
     });
     setChatInput("");
+
+    if (chatInputRef.current) {
+      chatInputRef.current.style.height = "42px";
+    }
+  };
+
+  const handleStartEditMessage = (message) => {
+    if (!message?.isOwn) return;
+    setEditingMessageId(message.id);
+    setEditingMessageContent(String(message.content || ""));
+  };
+
+  const handleCancelEditMessage = () => {
+    setEditingMessageId(null);
+    setEditingMessageContent("");
+    setUpdatingMessageId(null);
+  };
+
+  const handleUpdateMessage = () => {
+    const messageId = editingMessageId;
+    const content = editingMessageContent.trim();
+    if (!messageId) return;
+    if (!content) {
+      toast.error("Message cannot be empty");
+      return;
+    }
+
+    const socket = socketRef.current;
+    if (!socket || !isChatConnected) {
+      toast.error("Chat is not connected yet");
+      return;
+    }
+
+    setUpdatingMessageId(messageId);
+    socket.emit(CHAT_EVENTS.UPDATE_MESSAGE, {
+      courseId: String(courseId),
+      messageId,
+      content,
+    });
   };
 
   if (isLoading) {
@@ -682,19 +832,24 @@ const CourseLearning = () => {
   const completedLessons = getCompletedLessonsCount();
   const remainingLessons = Math.max(totalLessons - completedLessons, 0);
   const currentLessonNumber = currentLesson?._order || 1;
-  const courseThumbnail =
-    course?.thumbnail_url || defaultCoursePhoto;
+  const isTeacherViewOnly = isCourseTeacher && !enrollment;
+  const courseThumbnail = course?.thumbnail_url || defaultCoursePhoto;
+  const teacherName =
+    teacher?.username || teacher?.name || teacher?.email || "Instructor";
+  const teacherImage =
+    teacher?.image || teacher?.avatar || teacher?.photo_url || "";
+  const teacherInitial = String(teacherName).charAt(0).toUpperCase() || "I";
 
   return (
     <div
-      className={`min-h-screen bg-gray-50 dark:bg-dark-950 flex flex-col ${
+      className={`min-h-screen w-full overflow-x-hidden bg-gray-50 dark:bg-dark-950 flex flex-col ${
         isChatOpen ? "lg:pr-[24rem]" : ""
       }`}
     >
       {/* Top Header */}
       <div className="bg-white dark:bg-dark-900 border-b border-gray-200 dark:border-dark-700 sticky top-0 z-20">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="px-4 py-3 flex flex-wrap sm:flex-nowrap items-center gap-3">
+          <div className="flex items-center gap-4 order-1">
             <Link
               to="/my-courses"
               className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
@@ -704,7 +859,7 @@ const CourseLearning = () => {
             </Link>
           </div>
 
-          <div className="flex-1 max-w-xl mx-4">
+          <div className="order-3 sm:order-2 w-full sm:w-auto flex-1 min-w-0 sm:max-w-xl sm:mx-4">
             <div className="text-sm font-medium text-gray-900 dark:text-white mb-1 truncate">
               {course?.title}
             </div>
@@ -721,7 +876,46 @@ const CourseLearning = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="order-2 sm:order-3 ml-auto flex items-center gap-2 flex-shrink-0">
+            {teacher && (
+              <Link
+                to={teacherId ? `/instructor/${teacherId}` : "#"}
+                onClick={(event) => {
+                  if (!teacherId) event.preventDefault();
+                }}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border max-w-[180px] sm:max-w-[220px] transition-colors ${
+                  teacherId
+                    ? "border-gray-200 dark:border-dark-700 bg-gray-50 dark:bg-dark-800/70 hover:bg-gray-100 dark:hover:bg-dark-700/70"
+                    : "border-gray-200 dark:border-dark-700 bg-gray-50 dark:bg-dark-800/70 cursor-default"
+                }`}
+              >
+                <div className="h-8 w-8 rounded-full overflow-hidden bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                  {teacherImage ? (
+                    <img
+                      src={teacherImage}
+                      alt={`${teacherName} avatar`}
+                      className="h-full w-full object-cover"
+                      onError={(event) => {
+                        event.currentTarget.src = defaultUserPhoto;
+                      }}
+                    />
+                  ) : (
+                    <span className="text-xs font-semibold text-white">
+                      {teacherInitial}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] leading-none text-gray-500 dark:text-gray-400">
+                    Instructor
+                  </p>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                    {teacherName}
+                  </p>
+                </div>
+              </Link>
+            )}
+
             <button
               onClick={() => setIsChatOpen((prev) => !prev)}
               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
@@ -745,42 +939,66 @@ const CourseLearning = () => {
         </div>
       </div>
 
-      <div className="px-4 py-3 bg-white/80 dark:bg-dark-900/80 border-b border-gray-200 dark:border-dark-700 backdrop-blur-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900 px-4 py-3">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-              Current lesson
-            </p>
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">
-              {currentLessonNumber} / {Math.max(totalLessons, 1)}
-            </p>
-          </div>
-          <div className="rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900 px-4 py-3">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-              Completed
-            </p>
-            <p className="text-sm font-semibold text-green-700 dark:text-green-300">
-              {completedLessons} lessons
-            </p>
-          </div>
-          <div className="rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900 px-4 py-3">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-              Remaining
-            </p>
-            <p className="text-sm font-semibold text-primary-700 dark:text-primary-300">
-              {remainingLessons} lessons
-            </p>
+      {!isTeacherViewOnly && (
+        <div className="px-4 py-3 bg-white/80 dark:bg-dark-900/80 border-b border-gray-200 dark:border-dark-700 backdrop-blur-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900 px-4 py-3">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                Current lesson
+              </p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                {currentLessonNumber} / {Math.max(totalLessons, 1)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900 px-4 py-3">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                Completed
+              </p>
+              <p className="text-sm font-semibold text-green-700 dark:text-green-300">
+                {completedLessons} lessons
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900 px-4 py-3">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                Remaining
+              </p>
+              <p className="text-sm font-semibold text-primary-700 dark:text-primary-300">
+                {remainingLessons} lessons
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {currentLesson ? (
+          {isTeacherViewOnly ? (
+            <div className="flex-1 overflow-y-auto p-4 md:p-8">
+              <div className="max-w-4xl mx-auto">
+                <div className="rounded-2xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900 p-6 md:p-8">
+                  <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-3">
+                    Instructor View
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mb-6">
+                    Lesson content is hidden when you enter as the course
+                    instructor. Use chat to communicate with students or open
+                    your dashboard to manage lessons.
+                  </p>
+                  <Link
+                    to={`/teacher/courses/${courseId}/lessons`}
+                    className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-medium transition-colors"
+                  >
+                    Manage Lessons
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ) : currentLesson ? (
             <>
               {/* Lesson Content */}
-              <div className="flex-1 overflow-y-auto p-6 lg:p-8">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
                 <div className="max-w-4xl mx-auto">
                   {/* Lesson Header */}
                   <div className="mb-6">
@@ -792,7 +1010,7 @@ const CourseLearning = () => {
                       <span>•</span>
                       <span>Lesson {currentLesson._order || 1}</span>
                     </div>
-                    <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2 break-words">
                       {currentLesson.title}
                     </h1>
                     {currentLesson.description && (
@@ -940,12 +1158,12 @@ const CourseLearning = () => {
                                   key={question?.id || questionIndex}
                                   className="p-4 rounded-lg border border-gray-200 dark:border-dark-700"
                                 >
-                                  <div className="flex items-start justify-between gap-3 mb-3">
-                                    <p className="font-medium text-gray-900 dark:text-white">
+                                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-3">
+                                    <p className="font-medium text-gray-900 dark:text-white break-words">
                                       {questionIndex + 1}. {questionText}
                                     </p>
                                     {hasSubmittedCurrentQuiz && (
-                                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 whitespace-nowrap">
+                                      <span className="w-fit px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300">
                                         {questionScore ?? 0} /{" "}
                                         {questionMaxGrade}
                                       </span>
@@ -1016,7 +1234,7 @@ const CourseLearning = () => {
                                         return (
                                           <label
                                             key={`${questionKey}-${optionIndex}`}
-                                            className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 transition-colors ${
+                                            className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 transition-colors min-w-0 ${
                                               isCorrectOptionToShow
                                                 ? "bg-green-50 dark:bg-green-900/20"
                                                 : isSelectedWrongOption
@@ -1024,7 +1242,7 @@ const CourseLearning = () => {
                                                   : ""
                                             } ${hasSubmittedCurrentQuiz ? "cursor-default" : "cursor-pointer"} text-gray-700 dark:text-gray-300`}
                                           >
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 min-w-0">
                                               <input
                                                 type="radio"
                                                 name={`quiz-question-${questionKey}`}
@@ -1046,7 +1264,9 @@ const CourseLearning = () => {
                                                   }))
                                                 }
                                               />
-                                              <span>{optionLabel}</span>
+                                              <span className="break-words">
+                                                {optionLabel}
+                                              </span>
                                             </div>
                                             {hasSubmittedCurrentQuiz &&
                                               (isCorrectOptionToShow ||
@@ -1107,7 +1327,7 @@ const CourseLearning = () => {
                                       )}
 
                                       {submittedAnswer?.essay_answers && (
-                                        <p className="text-gray-700 dark:text-gray-300">
+                                        <p className="text-gray-700 dark:text-gray-300 break-words">
                                           Score:{" "}
                                           {submittedAnswer.essay_answers
                                             .ai_score ?? 0}
@@ -1171,7 +1391,7 @@ const CourseLearning = () => {
 
               {/* Bottom Navigation */}
               <div className="bg-white dark:bg-dark-900 border-t border-gray-200 dark:border-dark-700 p-4">
-                <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+                <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-3">
                   {/* Previous Button */}
                   <button
                     onClick={() => {
@@ -1188,7 +1408,7 @@ const CourseLearning = () => {
                         (l) => l.id === currentLesson.id,
                       ) <= 0
                     }
-                    className="px-6 py-3 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                    className="px-4 sm:px-6 py-3 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                   >
                     <ChevronLeft className="h-5 w-5" />
                     <span className="hidden sm:inline">Previous</span>
@@ -1208,7 +1428,7 @@ const CourseLearning = () => {
                             hasSubmittedCurrentQuiz ||
                             !areAllQuizQuestionsAnswered))
                       }
-                      className="px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium disabled:opacity-50 transition-all flex items-center gap-2"
+                      className="px-4 sm:px-8 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium disabled:opacity-50 transition-all flex items-center gap-2"
                     >
                       {isCompletingLesson ? (
                         <>
@@ -1234,7 +1454,7 @@ const CourseLearning = () => {
                         setCurrentLesson(null);
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className="px-6 py-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-dark-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-100 dark:hover:bg-dark-700 transition-all"
+                      className="px-4 sm:px-6 py-3 bg-white dark:bg-dark-800 border border-gray-200 dark:border-dark-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-100 dark:hover:bg-dark-700 transition-all"
                     >
                       Course Page
                     </button>
@@ -1260,7 +1480,7 @@ const CourseLearning = () => {
                         !nextLesson || !isLessonUnlocked(nextLesson._order)
                       );
                     })()}
-                    className="px-6 py-3 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                    className="px-4 sm:px-6 py-3 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                   >
                     <span className="hidden sm:inline">Next</span>
                     <ChevronRight className="h-5 w-5" />
@@ -1368,108 +1588,332 @@ const CourseLearning = () => {
         </div>
       </div>
 
+      {/* Improved Chat Panel */}
       <div
         className={`fixed inset-y-0 right-0 z-40 w-full sm:w-96 bg-white dark:bg-dark-900 border-l border-gray-200 dark:border-dark-700 shadow-2xl transition-transform duration-300 ${
           isChatOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <div className="h-full flex flex-col">
-          <div className="p-4 border-b border-gray-200 dark:border-dark-700 flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white">
-                Course Chat
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {isChatConnecting
-                  ? "Connecting..."
-                  : isChatConnected
-                    ? "Live now"
-                    : "Disconnected"}
-              </p>
+          {/* Header */}
+          <div className="p-4 border-b border-gray-200 dark:border-dark-700 bg-gradient-to-r from-primary-600 to-purple-600">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <MessageSquare className="h-6 w-6 text-white" />
+                  {isChatConnected && (
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-white"></span>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white">Course Chat</h3>
+                  <p className="text-xs text-white/80">
+                    {isChatConnecting
+                      ? "Connecting..."
+                      : isChatConnected
+                        ? `${chatMessages.length} messages`
+                        : "Disconnected"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                aria-label="Close chat"
+              >
+                <X className="h-5 w-5 text-white" />
+              </button>
             </div>
-            <button
-              onClick={() => setIsChatOpen(false)}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-800"
-              aria-label="Close chat"
-            >
-              <X className="h-4 w-4" />
-            </button>
           </div>
 
+          {/* Connection Error */}
           {chatConnectionError ? (
-            <div className="m-4 p-3 text-sm rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/40">
-              {chatConnectionError}
+            <div className="m-4 p-3 text-sm rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/40 flex items-start gap-2">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <span>{chatConnectionError}</span>
             </div>
           ) : null}
 
+          {/* Messages */}
           <div
             ref={chatMessagesContainerRef}
-            className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
+            className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50 dark:bg-dark-950"
           >
             {chatMessages.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-center text-sm text-gray-500 dark:text-gray-400">
-                <p>
-                  No messages yet.
-                  <br />
-                  Start the discussion with your classmates.
-                </p>
+              <div className="h-full flex items-center justify-center text-center">
+                <div className="max-w-[200px]">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-100 to-purple-100 dark:from-primary-900/30 dark:to-purple-900/30 flex items-center justify-center">
+                    <MessageSquare className="h-8 w-8 text-primary-600 dark:text-primary-400" />
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 font-medium mb-1">
+                    No messages yet
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-500">
+                    Start the conversation with your classmates
+                  </p>
+                </div>
               </div>
             ) : (
-              chatMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.isOwn ? "justify-end" : "justify-start"}`}
-                >
+              chatMessages.map((message, index) => {
+                const showAvatar =
+                  index === 0 ||
+                  chatMessages[index - 1].username !== message.username;
+                const isTeacherMessage =
+                  Boolean(teacherId) &&
+                  Boolean(message?.senderId) &&
+                  String(message.senderId) === String(teacherId);
+                const canEditMessage = message.isOwn;
+                const canDeleteMessage = message.isOwn || isCourseTeacher;
+                const isEditingThisMessage =
+                  String(editingMessageId) === String(message.id);
+                const isUpdatingThisMessage =
+                  String(updatingMessageId) === String(message.id);
+
+                return (
                   <div
-                    className={`max-w-[85%] rounded-2xl px-3 py-2 ${
-                      message.isOwn
-                        ? "bg-primary-600 text-white"
-                        : "bg-gray-100 dark:bg-dark-800 text-gray-900 dark:text-gray-100"
-                    }`}
+                    key={message.id}
+                    className={`flex gap-2 ${message.isOwn ? "justify-end" : "justify-start"} group`}
                   >
-                    <p className="text-xs font-semibold opacity-80 mb-1">
-                      {message.username}
-                    </p>
-                    <p className="text-sm whitespace-pre-wrap break-words">
-                      {message.content}
-                    </p>
-                    <p className="text-[10px] opacity-70 mt-1">
-                      {message.time}
-                    </p>
+                    {/* Avatar (for others' messages) */}
+                    {!message.isOwn && (
+                      <div className="flex-shrink-0">
+                        {showAvatar ? (
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold ${
+                              isTeacherMessage
+                                ? "bg-gradient-to-br from-amber-500 to-orange-600"
+                                : "bg-gradient-to-br from-gray-400 to-gray-600"
+                            }`}
+                          >
+                            {message.username?.charAt(0).toUpperCase() || "?"}
+                          </div>
+                        ) : (
+                          <div className="w-8"></div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Message Bubble */}
+                    <div
+                      className={`max-w-[75%] ${message.isOwn ? "items-end" : "items-start"} flex flex-col gap-1`}
+                    >
+                      {/* Username (show for others or when avatar shows) */}
+                      {(!message.isOwn || showAvatar) && (
+                        <div
+                          className={`text-xs font-semibold px-1 ${
+                            message.isOwn
+                              ? "text-primary-700 dark:text-primary-300"
+                              : "text-gray-700 dark:text-gray-300"
+                          }`}
+                        >
+                          <span>{message.isOwn ? "You" : message.username}</span>
+                          {isTeacherMessage && (
+                            <span className="ml-1.5 inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                              Teacher
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Message Content */}
+                      <div className="relative group/message">
+                        <div
+                          className={`rounded-2xl px-4 py-2 shadow-sm ${
+                            message.isOwn
+                              ? "bg-gradient-to-br from-primary-600 to-purple-600 text-white rounded-tr-sm"
+                              : "bg-white dark:bg-dark-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-dark-700 rounded-tl-sm"
+                          }`}
+                        >
+                          {canEditMessage && isEditingThisMessage ? (
+                            <div className="space-y-2">
+                              <textarea
+                                value={editingMessageContent}
+                                onChange={(event) =>
+                                  setEditingMessageContent(event.target.value)
+                                }
+                                rows={2}
+                                className="w-full px-3 py-2 rounded-lg bg-white/90 text-gray-900 text-sm border border-white/60 focus:outline-none"
+                              />
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditMessage}
+                                  disabled={isUpdatingThisMessage}
+                                  className="px-2.5 py-1 text-xs rounded-md bg-white/20 hover:bg-white/30 transition-colors disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleUpdateMessage}
+                                  disabled={
+                                    isUpdatingThisMessage ||
+                                    !editingMessageContent.trim()
+                                  }
+                                  className="px-2.5 py-1 text-xs rounded-md bg-white text-primary-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                                >
+                                  {isUpdatingThisMessage ? "Saving..." : "Save"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                              {message.content}
+                            </p>
+                          )}
+                          <p
+                            className={`text-[10px] mt-1 ${
+                              message.isOwn
+                                ? "text-white/70"
+                                : "text-gray-500 dark:text-gray-400"
+                            }`}
+                          >
+                            {message.time}
+                            {message.isEdited ? " • edited" : ""}
+                          </p>
+                        </div>
+
+                        {/* Message Actions (only for own messages) */}
+                        {(canEditMessage || canDeleteMessage) &&
+                          !isEditingThisMessage && (
+                          <div className="absolute -left-8 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover/message:opacity-100 transition-opacity">
+                            {canEditMessage && (
+                              <button
+                                onClick={() => handleStartEditMessage(message)}
+                                className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50"
+                                title="Edit message"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            {canDeleteMessage && (
+                              <button
+                                onClick={() => setShowDeleteConfirm(message.id)}
+                                className="p-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50"
+                                title="Delete message"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Avatar (for own messages) */}
+                    {message.isOwn && (
+                      <div className="flex-shrink-0">
+                        {showAvatar ? (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-600 to-purple-600 flex items-center justify-center text-white text-xs font-semibold">
+                            {currentUsername?.charAt(0).toUpperCase() || "Y"}
+                          </div>
+                        ) : (
+                          <div className="w-8"></div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
-          <div className="p-3 border-t border-gray-200 dark:border-dark-700">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-                placeholder="Write a message..."
-                className="flex-1 px-3 py-2 rounded-xl border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                disabled={!isChatConnected}
-              />
+          {/* Input Area */}
+          <div className="p-3 border-t border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-900">
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <textarea
+                  ref={chatInputRef}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder="Type your message..."
+                  rows={1}
+                  className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 dark:border-dark-700 bg-gray-50 dark:bg-dark-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                  style={{
+                    minHeight: "42px",
+                    maxHeight: "120px",
+                  }}
+                  disabled={!isChatConnected}
+                  onInput={(e) => {
+                    e.target.style.height = "42px";
+                    e.target.style.height = e.target.scrollHeight + "px";
+                  }}
+                />
+                <p className="text-[10px] text-gray-500 dark:text-gray-500 mt-1 px-1">
+                  {isChatConnected
+                    ? "Press Enter to send, Shift+Enter for new line"
+                    : "Connecting..."}
+                </p>
+              </div>
               <button
                 onClick={handleSendMessage}
                 disabled={!isChatConnected || !chatInput.trim()}
-                className="px-3 py-2 rounded-xl bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary-600 to-purple-600 text-white hover:from-primary-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg disabled:shadow-none flex items-center gap-2"
                 aria-label="Send message"
               >
                 <Send className="h-4 w-4" />
+                <span className="text-sm font-medium hidden sm:inline">
+                  Send
+                </span>
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-dark-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                  Delete Message?
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  This action cannot be undone
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                disabled={deletingMessageId}
+                className="flex-1 px-4 py-2.5 bg-gray-100 dark:bg-dark-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-dark-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteMessage(showDeleteConfirm)}
+                disabled={deletingMessageId}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deletingMessageId === showDeleteConfirm ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isChatOpen && (
         <div

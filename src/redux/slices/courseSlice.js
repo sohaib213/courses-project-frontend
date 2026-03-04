@@ -2,6 +2,27 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { courseService } from "../../services/courseService";
 import { DEFAULT_PAGE_LIMIT } from "../../constants/pagination";
 
+const COURSES_CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_COURSES_CACHE_ENTRIES = 20;
+
+const normalizeCoursesQueryParams = (params = {}) => {
+  const internalKeys = new Set(["forceRefresh"]);
+  return Object.keys(params)
+    .sort()
+    .reduce((acc, key) => {
+      if (internalKeys.has(key)) return acc;
+      const value = params[key];
+      if (value === undefined || value === null || value === "") return acc;
+      acc[key] = value;
+      return acc;
+    }, {});
+};
+
+const buildCoursesCacheKey = (params = {}) => {
+  const normalized = normalizeCoursesQueryParams(params);
+  return JSON.stringify(normalized);
+};
+
 const normalizeCoursesPayload = (payload) => {
   const data = payload?.data ?? payload;
 
@@ -32,10 +53,33 @@ const normalizeCoursesPayload = (payload) => {
 // Async Thunks
 export const fetchCourses = createAsyncThunk(
   "courses/fetchCourses",
-  async (params = {}, { rejectWithValue }) => {
+  async (params = {}, { getState, rejectWithValue }) => {
     try {
-      const data = await courseService.getAllCourses(params);
-      return { data, params }; // Return params to track current filters
+      const normalizedParams = normalizeCoursesQueryParams(params);
+      const cacheKey = buildCoursesCacheKey(normalizedParams);
+      const cacheEntry = getState().courses?.coursesCache?.[cacheKey];
+      const isCacheValid =
+        Boolean(cacheEntry) &&
+        Date.now() - cacheEntry.timestamp < COURSES_CACHE_TTL_MS;
+
+      if (isCacheValid && !params.forceRefresh) {
+        return {
+          data: cacheEntry.data,
+          params: normalizedParams,
+          cacheKey,
+          fetchedAt: cacheEntry.timestamp,
+          fromCache: true,
+        };
+      }
+
+      const data = await courseService.getAllCourses(normalizedParams);
+      return {
+        data,
+        params: normalizedParams,
+        cacheKey,
+        fetchedAt: Date.now(),
+        fromCache: false,
+      };
     } catch (error) {
       return rejectWithValue(
         error.response?.data?.message || "Failed to fetch courses",
@@ -199,6 +243,8 @@ const initialState = {
   courses: [],
   currentCourse: null,
   myCourses: [],
+  coursesCache: {},
+  lastCoursesQueryKey: "",
   isLoading: false,
   error: null,
   pagination: {
@@ -262,6 +308,7 @@ const courseSlice = createSlice({
         const normalized = normalizeCoursesPayload(action.payload.data);
         state.courses = normalized.courses;
         state.pagination.total_count = normalized.count;
+        state.lastCoursesQueryKey = action.payload.cacheKey || "";
 
         if (normalized.pagination) {
           state.pagination = {
@@ -269,6 +316,25 @@ const courseSlice = createSlice({
             ...normalized.pagination,
             total_count: normalized.count,
           };
+        }
+
+        const cacheKey = action.payload.cacheKey;
+        if (cacheKey) {
+          state.coursesCache[cacheKey] = {
+            data: action.payload.data,
+            timestamp: action.payload.fetchedAt || Date.now(),
+          };
+
+          const keys = Object.keys(state.coursesCache);
+          if (keys.length > MAX_COURSES_CACHE_ENTRIES) {
+            const oldestKey = keys.reduce((oldest, key) =>
+              state.coursesCache[key].timestamp <
+              state.coursesCache[oldest].timestamp
+                ? key
+                : oldest,
+            );
+            delete state.coursesCache[oldestKey];
+          }
         }
       })
       .addCase(fetchCourses.rejected, (state, action) => {
@@ -351,6 +417,7 @@ const courseSlice = createSlice({
       .addCase(createCourse.fulfilled, (state, action) => {
         state.isLoading = false;
         state.courses.unshift(action.payload);
+        state.coursesCache = {};
       })
       .addCase(createCourse.rejected, (state, action) => {
         state.isLoading = false;
@@ -374,6 +441,7 @@ const courseSlice = createSlice({
         if (state.currentCourse?.id === action.payload.id) {
           state.currentCourse = action.payload;
         }
+        state.coursesCache = {};
       })
       .addCase(updateCourse.rejected, (state, action) => {
         state.isLoading = false;
@@ -391,6 +459,7 @@ const courseSlice = createSlice({
         state.courses = state.courses.filter(
           (course) => course.id !== action.payload,
         );
+        state.coursesCache = {};
       })
       .addCase(deleteCourse.rejected, (state, action) => {
         state.isLoading = false;

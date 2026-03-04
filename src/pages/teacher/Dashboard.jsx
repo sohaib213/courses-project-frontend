@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   BookOpen,
   Users,
@@ -21,6 +21,7 @@ import CreateCourseModal from "./components/CreateCourseModal";
 import { DEFAULT_PAGE_LIMIT } from "../../constants/pagination";
 
 const TeacherDashboard = () => {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [totalCoursesCount, setTotalCoursesCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -288,7 +289,19 @@ const TeacherDashboard = () => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredCourses.map((course) => (
-                <div key={course.id} className="card-hover group">
+                <div
+                  key={course.id}
+                  className="card-hover group cursor-pointer"
+                  onClick={() => navigate(`/courses/${course.id}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      navigate(`/courses/${course.id}`);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
                   {/* Thumbnail */}
                   <div className="relative overflow-hidden rounded-xl mb-4 aspect-video">
                     <img
@@ -348,6 +361,7 @@ const TeacherDashboard = () => {
                   <div className="flex gap-2">
                     <Link
                       to={`/teacher/courses/${course.id}/lessons`}
+                      onClick={(event) => event.stopPropagation()}
                       className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-all text-center flex items-center justify-center gap-2"
                     >
                       <Eye className="h-4 w-4" />
@@ -355,13 +369,17 @@ const TeacherDashboard = () => {
                     </Link>
                     <Link
                       to={`/teacher/courses/${course.id}/edit`}
+                      onClick={(event) => event.stopPropagation()}
                       className="px-4 py-2 bg-gray-100 dark:bg-dark-800 hover:bg-gray-200 dark:hover:bg-dark-700 text-gray-700 dark:text-gray-300 rounded-xl transition-all"
                       title="Edit course"
                     >
                       <Edit className="h-4 w-4" />
                     </Link>
                     <button
-                      onClick={() => handleDeleteCourse(course.id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleDeleteCourse(course.id);
+                      }}
                       disabled={deletingCourseId === course.id}
                       className="px-4 py-2 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-xl transition-all disabled:opacity-50"
                       title="Delete course"

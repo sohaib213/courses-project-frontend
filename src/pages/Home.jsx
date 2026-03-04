@@ -230,10 +230,10 @@ const Home = () => {
           ></div>
         </div>
 
-        <div className="container-custom relative z-10 py-20 md:py-32">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
+        <div className="container-custom relative z-10 px-4 sm:px-6 md:px-0 py-12 sm:py-16 md:py-32">
+          <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
             {/* Left Content */}
-            <div className="text-white space-y-8 animate-slide-up">
+            <div className="text-white space-y-6 md:space-y-8 animate-slide-up">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 dark:bg-white/10 backdrop-blur-sm rounded-full">
                 <Sparkles className="h-4 w-4" />
                 <span className="text-sm font-medium">
@@ -241,14 +241,14 @@ const Home = () => {
                 </span>
               </div>
 
-              <h1 className="text-5xl md:text-7xl font-bold leading-tight">
+              <h1 className="text-3xl sm:text-4xl md:text-7xl font-bold leading-tight">
                 Master New Skills
                 <span className="block text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 to-pink-200">
                   Transform Your Future
                 </span>
               </h1>
 
-              <p className="text-xl md:text-2xl text-white/90 dark:text-white/80">
+              <p className="text-base sm:text-lg md:text-2xl text-white/90 dark:text-white/80">
                 Join thousands of learners worldwide. Access expert-led courses,
                 earn certificates, and accelerate your career.
               </p>
@@ -271,7 +271,7 @@ const Home = () => {
               </div>
 
               {/* Quick Stats */}
-              <div className="flex gap-8 pt-4">
+              <div className="flex flex-wrap gap-6 sm:gap-8 pt-2 md:pt-4">
                 <div>
                   <div className="text-3xl font-bold">
                     {displayedStudentsCount}
@@ -296,15 +296,15 @@ const Home = () => {
             </div>
 
             {/* Right Content - Image/Graphic */}
-            <div className="relative animate-fade-in">
+            <div className="relative animate-fade-in mt-2 md:mt-0 px-2 sm:px-0">
               <div className="relative">
                 <img
                   src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=600&h=600&fit=crop"
                   alt="Students learning"
-                  className="rounded-3xl shadow-2xl transform hover:scale-105 transition-transform duration-500"
+                  className="w-full rounded-3xl shadow-2xl transform hover:scale-105 transition-transform duration-500"
                 />
                 {/* Floating Card */}
-                <div className="absolute -bottom-6 -left-6 glass rounded-2xl p-4 shadow-2xl animate-float">
+                <div className="absolute -bottom-4 left-3 md:-bottom-6 md:-left-6 glass rounded-2xl p-3 md:p-4 shadow-2xl animate-float">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center">
                       <CheckCircle2 className="h-6 w-6 text-white" />
