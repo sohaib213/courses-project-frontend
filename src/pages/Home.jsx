@@ -291,7 +291,7 @@ const Home = () => {
             <div className="relative animate-fade-in mt-2 md:mt-0 px-2 sm:px-0">
               <div className="relative">
                 <img
-                  src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=600&h=600&fit=crop"
+                  src="https://res.cloudinary.com/dspfo4tsu/image/upload/v1772705529/homepage_photo_h6gipi.png"
                   alt="Students learning"
                   className="w-full rounded-3xl shadow-2xl transform hover:scale-105 transition-transform duration-500"
                 />
